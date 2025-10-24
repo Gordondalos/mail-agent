@@ -1,4 +1,6 @@
 windows_wsl_setup_acknowledged = true
+model = "gpt-5"
+model_reasoning_effort = "high"
 
 [projects.'\\?\C:\project\mail-agent']
 trust_level = "trusted"
