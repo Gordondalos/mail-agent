@@ -40,7 +40,7 @@ description: "Task list for Mail Tray Notifier (Gmail OAuth)"
 - [x] T009 Implement Gmail unread fetch and mark-read operations at src-tauri/src/gmail.rs
 - [x] T010 Implement notifier queue and event emission to frontend at src-tauri/src/notifier.rs
 - [x] T011 Expose Tauri commands (auth/connect, settings get/save, unread list, mark read, open link) at src-tauri/src/main.rs
-- [ ] T012 Update Angular build integration (serve/build paths) at frontend/angular.json
+- [x] T012 Update Angular build integration (serve/build paths) at frontend/angular.json
 
 // Номера задач глобально последовательные; следующие задачи относятся к фундаментальным
 - [x] T044 Implement polling scheduler loop driven by settings interval (start/stop, tick handler) at src-tauri/src/main.rs
@@ -58,9 +58,9 @@ description: "Task list for Mail Tray Notifier (Gmail OAuth)"
 
 ### Implementation for User Story 1
 
-- [ ] T013 [US1] Implement SettingsPageComponent form UI (fields: polling interval, sound file, autostart, connect button) at frontend/src/app/components/settings-page/settings-page.component.ts
-- [ ] T014 [P] [US1] Implement SettingsService (get/save) calling Tauri commands at frontend/src/app/services/settings.service.ts
-- [ ] T015 [US1] Wire OAuth connect button to Tauri `auth/connect` and handle completion at frontend/src/app/components/settings-page/settings-page.component.ts
+- [x] T013 [US1] Implement SettingsPageComponent form UI (fields: polling interval, sound file, autostart, connect button) at frontend/src/app/components/settings-page/settings-page.component.ts
+- [x] T014 [P] [US1] Implement SettingsService (get/save) calling Tauri commands at frontend/src/app/services/settings.service.ts
+- [x] T015 [US1] Wire OAuth connect button to Tauri `auth/connect` and handle completion at frontend/src/app/components/settings-page/settings-page.component.ts
 - [ ] T016 [US1] Wire settings get/save commands in Tauri at src-tauri/src/main.rs
 
 **Checkpoint**: User can connect account and manage settings; values persist
@@ -75,8 +75,8 @@ description: "Task list for Mail Tray Notifier (Gmail OAuth)"
 
 ### Implementation for User Story 2
 
-- [ ] T020 [US2] Implement NotificationOverlayComponent UI (фиксированный размер 600×150, кнопки «Просмотреть»/«Пропустить») at frontend/src/app/components/notification-overlay/notification-overlay.component.ts
-- [ ] T021 [P] [US2] Subscribe to Tauri events (new email notifications) in IPC service at frontend/src/app/services/ipc.service.ts
+- [x] T020 [US2] Implement NotificationOverlayComponent UI (фиксированный размер 800×150, кнопки «Просмотреть»/«Пропустить») at frontend/src/app/components/notification-overlay/notification-overlay.component.ts
+- [x] T021 [P] [US2] Subscribe to Tauri events (new email notifications) in IPC service at frontend/src/app/services/ipc.service.ts
 - [x] T022 [US2] Реализовать действие «Просмотреть» (открытие браузера по умолчанию) at src-tauri/src/main.rs
 - [x] T023 [US2] Реализовать действие «Пропустить» (пометить письмо прочитанным и закрыть оверлей) at src-tauri/src/gmail.rs
 
@@ -109,7 +109,7 @@ description: "Task list for Mail Tray Notifier (Gmail OAuth)"
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [ ] T040 Update quickstart.md with Angular setup steps at specs/001-gmail-oauth-notifier/quickstart.md
+- [x] T040 Update quickstart.md with Angular setup steps at specs/001-gmail-oauth-notifier/quickstart.md
 - [ ] T041 [P] Localize UI strings to Russian at frontend/src/app/
 - [ ] T042 [P] Add structured logging for auth/poll/queue/actions at src-tauri/src/
 - [ ] T043 Tune default polling interval and validation at src-tauri/src/config.rs

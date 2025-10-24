@@ -22,7 +22,7 @@
       {
         "label": "alert",
         "title": "Gmail Tray Notifier",
-        "width": 650,
+        "width": 800,
         "height": 150,
         "visible": false,
         "resizable": false,
@@ -30,7 +30,7 @@
         "transparent": true,
         "alwaysOnTop": true,
         "skipTaskbar": true,
-        "url": "index.html?view=alert"
+        "url": "/alert"
       }
     ],
     "trayIcon": {
