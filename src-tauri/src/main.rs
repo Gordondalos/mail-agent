@@ -13,10 +13,10 @@ use config::{Settings, SettingsManager, SettingsUpdate};
 use gmail::{wait_for_authorisation, GmailClient};
 use notifier::NotificationQueue;
 use oauth::{ensure_autostart, AccessTokenProvider, OAuthController, OAuthError};
-use tauri::api::shell;
 use tauri::{
     CustomMenuItem, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem,
 };
+use tauri_plugin_autostart::MacosLauncher;
 use tracing::warn;
 
 #[derive(Clone)]
@@ -154,7 +154,7 @@ async fn open_in_browser(
         .notifier
         .complete_current(&app)
         .map_err(|err| err.to_string())?;
-    shell::open(&app.shell_scope(), url, None).map_err(|err| err.to_string())
+    webbrowser::open(&url).map_err(|err| err.to_string()).map(|_| ())
 }
 
 #[tauri::command]
@@ -190,6 +190,7 @@ fn main() {
         .init();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
         .system_tray(build_tray())
         .on_system_tray_event(|app, event| match event {
             SystemTrayEvent::MenuItemClick { id, .. } => match id.as_str() {
