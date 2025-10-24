@@ -181,6 +181,8 @@ impl OAuthController {
     }
 }
 
+// no custom HTTP client needed; oauth2 + reqwest with rustls is enabled via Cargo features
+
 #[async_trait]
 impl AccessTokenProvider for OAuthController {
     async fn access_token(&self) -> Result<String, OAuthError> {

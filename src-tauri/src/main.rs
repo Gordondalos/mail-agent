@@ -20,7 +20,7 @@ use tauri::{
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tokio::time::sleep;
-use tracing::warn;
+use tracing::{error, warn};
 
 #[derive(Clone)]
 struct AppState {
@@ -91,14 +91,25 @@ async fn request_authorisation(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    state
-        .oauth
-        .authorise(&app)
-        .await
-        .map_err(|err| format!("{err:?}"))?;
+    let res = state.oauth.authorise(&app).await;
+    if let Err(ref err) = res {
+        error!(?err, "authorisation failed");
+    }
+    res.map_err(stringify_error)?;
     state.oauth.load_cached();
     state.poll_once(&app).await.map_err(|err| err.to_string())?;
     Ok(())
+}
+
+fn stringify_error<E: std::error::Error>(err: E) -> String {
+    use std::fmt::Write as _;
+    let mut s = format!("{}", err);
+    let mut src = err.source();
+    while let Some(e) = src {
+        let _ = write!(&mut s, "\nCaused by: {}", e);
+        src = e.source();
+    }
+    s
 }
 
 #[tauri::command]
@@ -228,6 +239,16 @@ fn register_tray(app: &tauri::App) -> tauri::Result<()> {
 }
 
 fn main() {
+    // Avoid broken system proxy settings interfering with OAuth HTTPS calls
+    // If NO_PROXY isn't set, exclude Google OAuth hosts and localhost from proxying
+    let no_proxy_is_set = std::env::var_os("NO_PROXY").is_some() || std::env::var_os("no_proxy").is_some();
+    if !no_proxy_is_set {
+        std::env::set_var(
+            "NO_PROXY",
+            "127.0.0.1,localhost,oauth2.googleapis.com,accounts.google.com,googleapis.com,google.com",
+        );
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .with_target(false)
