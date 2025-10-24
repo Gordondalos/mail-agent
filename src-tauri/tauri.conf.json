@@ -1,0 +1,41 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "package": {
+    "productName": "Gmail Tray Notifier",
+    "version": "0.1.0"
+  },
+  "build": {
+    "beforeBuildCommand": "",
+    "beforeDevCommand": "",
+    "devPath": "../frontend",
+    "distDir": "../frontend"
+  },
+  "tauri": {
+    "bundle": {
+      "active": true,
+      "targets": "all",
+      "identifier": "com.example.gmailtray"
+    },
+    "security": {
+      "csp": null
+    },
+    "allowlist": {
+      "shell": {
+        "all": true
+      },
+      "fs": {
+        "all": true
+      }
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "Gmail Tray Notifier",
+        "width": 900,
+        "height": 620,
+        "visible": true,
+        "resizable": true
+      }
+    ]
+  }
+}
