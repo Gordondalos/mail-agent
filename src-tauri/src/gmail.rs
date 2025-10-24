@@ -9,7 +9,7 @@ use reqwest::StatusCode;
 use serde::Deserialize;
 use serde::Serialize;
 use tokio::time::timeout;
-use tracing::warn;
+use tracing::{debug, warn};
 
 use crate::oauth::{AccessTokenProvider, OAuthError};
 
@@ -53,6 +53,7 @@ impl GmailClient {
     pub async fn fetch_unread(&self, query: &str) -> Result<Vec<GmailNotification>> {
         let token = self.token_provider.access_token().await?;
         let url = format!("{}/messages", GMAIL_API);
+        debug!(%url, %query, "gmail: listing messages");
         let response = self
             .http
             .get(url)
@@ -62,6 +63,7 @@ impl GmailClient {
             .await
             .context("failed to list gmail messages")?;
 
+        debug!(status = ?response.status(), "gmail: list response");
         if response.status() == StatusCode::UNAUTHORIZED {
             return Err(OAuthError::NotAuthorised.into());
         }
@@ -77,7 +79,9 @@ impl GmailClient {
             .await
             .context("invalid gmail list response")?;
         let mut notifications = Vec::new();
-        for item in list.messages.unwrap_or_default() {
+        let items = list.messages.unwrap_or_default();
+        debug!(count = items.len(), "gmail: list parsed");
+        for item in items {
             if self.is_known(&item.id) {
                 continue;
             }
@@ -96,6 +100,7 @@ impl GmailClient {
     async fn fetch_message(&self, id: &str) -> Result<GmailNotification> {
         let token = self.token_provider.access_token().await?;
         let url = format!("{}/messages/{}", GMAIL_API, id);
+        debug!(%id, %url, "gmail: fetch message");
         let response = self
             .http
             .get(url)
@@ -110,6 +115,7 @@ impl GmailClient {
             .await
             .context("failed to fetch gmail message")?;
 
+        debug!(%id, status = ?response.status(), "gmail: message response");
         if response.status() == StatusCode::UNAUTHORIZED {
             return Err(OAuthError::NotAuthorised.into());
         }
@@ -130,6 +136,7 @@ impl GmailClient {
     pub async fn mark_read(&self, id: &str) -> Result<()> {
         let token = self.token_provider.access_token().await?;
         let url = format!("{}/messages/{}/modify", GMAIL_API, id);
+        debug!(%id, %url, "gmail: mark read");
         let response = self
             .http
             .post(url)
@@ -139,6 +146,7 @@ impl GmailClient {
             .await
             .context("failed to modify message")?;
 
+        debug!(%id, status = ?response.status(), "gmail: mark read response");
         if response.status() == StatusCode::UNAUTHORIZED {
             return Err(OAuthError::NotAuthorised.into());
         }

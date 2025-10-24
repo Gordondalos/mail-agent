@@ -21,7 +21,7 @@ use tauri::{
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tokio::time::sleep;
-use tracing::{error, warn};
+use tracing::{debug, error, info, warn};
 
 #[derive(Clone)]
 struct AppState {
@@ -217,6 +217,7 @@ fn register_tray(app: &tauri::App) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app_handle, event| match event.id().as_ref() {
             "check_now" => {
+                info!("tray click: check_now");
                 let poll_handle = app_handle.clone();
                 let app_state = poll_handle.state::<AppState>().inner().clone();
                 tauri::async_runtime::spawn(async move {
@@ -226,12 +227,14 @@ fn register_tray(app: &tauri::App) -> tauri::Result<()> {
                 });
             }
             "open_settings" => {
+                info!("tray click: open_settings");
                 if let Some(win) = app_handle.get_webview_window("main") {
                     let _ = win.show();
                     let _ = win.set_focus();
                 }
             }
             "auth" => {
+                info!("tray click: auth");
                 let auth_handle = app_handle.clone();
                 let app_state = auth_handle.state::<AppState>().inner().clone();
                 tauri::async_runtime::spawn(async move {
@@ -241,6 +244,7 @@ fn register_tray(app: &tauri::App) -> tauri::Result<()> {
                 });
             }
             "logout" => {
+                info!("tray click: logout");
                 let app_state = app_handle.state::<AppState>().inner().clone();
                 tauri::async_runtime::spawn(async move {
                     if let Err(err) = app_state.oauth.revoke().await {
@@ -249,12 +253,14 @@ fn register_tray(app: &tauri::App) -> tauri::Result<()> {
                 });
             }
             "quit" => {
+                info!("tray click: quit");
                 app_handle.exit(0);
             }
             _ => {}
         })
         .on_tray_icon_event(|tray, event| match event {
             TrayIconEvent::Click { button, .. } | TrayIconEvent::DoubleClick { button, .. } => {
+                debug!(?button, "tray icon click");
                 if button == MouseButton::Left {
                     let handle = tray.app_handle();
                     if let Some(win) = handle.get_webview_window("main") {
@@ -285,8 +291,12 @@ fn main() {
         );
     }
 
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(
+            "gmail_tray_notifier=debug,reqwest=debug,hyper=debug",
+        ));
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_env_filter(env_filter)
         .with_target(false)
         .init();
 
