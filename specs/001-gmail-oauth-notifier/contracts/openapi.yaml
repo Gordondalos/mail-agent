@@ -1,0 +1,48 @@
+openapi: 3.0.3
+info:
+  title: Mail Tray Notifier Contracts
+  version: 0.1.0
+paths:
+  /auth/connect:
+    post:
+      summary: Start authorization flow
+      responses:
+        '200': { description: Authorization initiated }
+  /settings:
+    get:
+      summary: Get current settings
+      responses:
+        '200': { description: Settings retrieved }
+    post:
+      summary: Save settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                polling_interval_seconds: { type: integer, minimum: 15 }
+                sound_file_path: { type: string }
+                autostart_enabled: { type: boolean }
+      responses:
+        '204': { description: Saved }
+  /mail/unread:
+    get:
+      summary: List unread emails
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50 }
+      responses:
+        '200': { description: Unread list }
+  /mail/{id}/mark-read:
+    post:
+      summary: Mark email as read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: Marked read }

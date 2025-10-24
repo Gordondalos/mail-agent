@@ -293,17 +293,6 @@ async function initAlert() {
   root.append(shell);
 
   let currentNotification = null;
-  let autoHideTimer = null;
-  let isHovering = false;
-
-  const scheduleHide = () => {
-    clearTimeout(autoHideTimer);
-    autoHideTimer = setTimeout(async () => {
-      if (!isHovering) {
-        await hideToast(false);
-      }
-    }, 9000);
-  };
 
   const hideToast = async (notifyBackend = true) => {
     clearTimeout(autoHideTimer);
@@ -320,14 +309,7 @@ async function initAlert() {
     }
   };
 
-  shell.addEventListener('mouseenter', () => {
-    isHovering = true;
-    clearTimeout(autoHideTimer);
-  });
-  shell.addEventListener('mouseleave', () => {
-    isHovering = false;
-    scheduleHide();
-  });
+  // Автоскрытие отключено: оверлей остаётся до действия пользователя
 
   openBtn.addEventListener('click', async () => {
     if (!currentNotification) return;
@@ -360,7 +342,6 @@ async function initAlert() {
     await appWindow.show();
     await appWindow.setFocus();
     playSound();
-    scheduleHide();
   };
 
   const playSound = async () => {

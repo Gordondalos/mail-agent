@@ -6,8 +6,8 @@
   "build": {
     "beforeBuildCommand": "",
     "beforeDevCommand": "",
-    "devUrl": "http://localhost:1420",
-    "frontendDist": "../frontend"
+    "devUrl": "http://localhost:4200",
+    "frontendDist": "../frontend/dist/mail-agent/browser"
   },
   "app": {
     "windows": [

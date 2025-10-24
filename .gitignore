@@ -1,2 +1,21 @@
 .idea/
 release/
+# Rust (Tauri)
+src-tauri/target/
+src-tauri/debug/
+src-tauri/release/
+*.rs.bk
+*.rlib
+*.prof*
+
+# Node/JS
+node_modules/
+dist/
+build/
+*.log
+.env*
+
+# Editors/OS
+.vscode/
+.DS_Store
+Thumbs.db
