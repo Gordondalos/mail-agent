@@ -18,11 +18,28 @@
         "height": 620,
         "visible": true,
         "resizable": true
+      },
+      {
+        "label": "alert",
+        "title": "Gmail Tray Notifier",
+        "width": 650,
+        "height": 150,
+        "visible": false,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "url": "index.html?view=alert"
       }
-    ]
+    ],
+    "trayIcon": {
+      "iconPath": "icons/icon.ico"
+    }
   },
   "bundle": {
     "active": true,
-    "targets": "all"
+    "targets": "all",
+    "icon": ["icons/icon.ico"]
   }
 }

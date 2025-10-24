@@ -7,8 +7,8 @@ use chrono::{DateTime, Utc};
 use oauth2::basic::BasicClient;
 use oauth2::reqwest::async_http_client;
 use oauth2::{
-    AccessToken, AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge,
-    PkceCodeVerifier, RedirectUrl, RefreshToken, Scope, TokenResponse, TokenUrl,
+    AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge, RedirectUrl,
+    RefreshToken, Scope, TokenResponse, TokenType, TokenUrl,
 };
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -80,18 +80,14 @@ impl OAuthController {
                 ))
                 .map_err(|err| OAuthError::Other(err.into()))?;
 
-                let mut client = BasicClient::new(client_id, secret, auth_url, Some(token_url))
+                let client = BasicClient::new(client_id, secret, auth_url, Some(token_url))
                     .set_redirect_uri(redirect_url);
-                // Gmail desktop apps require offline access for refresh tokens
-                client = client.add_scope(Scope::new(
-                    "https://www.googleapis.com/auth/gmail.modify".into(),
-                ));
                 Ok(client)
             })
             .await
     }
 
-    pub async fn authorise(&self, app: &AppHandle) -> Result<AuthorisationResult, OAuthError> {
+    pub async fn authorise(&self, _app: &AppHandle) -> Result<AuthorisationResult, OAuthError> {
         let client = self.ensure_client().await?;
         let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
         let (auth_url, csrf_state) = client
@@ -105,8 +101,7 @@ impl OAuthController {
             ))
             .url();
 
-        webbrowser::open(&auth_url.to_string())
-            .map_err(|err| OAuthError::Other(err.into()))?;
+        webbrowser::open(&auth_url.to_string()).map_err(|err| OAuthError::Other(err.into()))?;
 
         let code = wait_for_code(csrf_state.secret()).await?;
         let token_response = client
@@ -133,25 +128,31 @@ impl OAuthController {
     }
 
     async fn refresh_if_needed(&self, client: &BasicClient) -> Result<Option<String>, OAuthError> {
-        let mut cache = self.cache.lock();
-        if let Some(token) = cache.as_mut() {
-            if !token.is_expired() {
-                return Ok(Some(token.access_token.clone()));
+        let refresh_token = {
+            let mut cache = self.cache.lock();
+            if let Some(token) = cache.as_mut() {
+                if !token.is_expired() {
+                    return Ok(Some(token.access_token.clone()));
+                }
+                token.refresh_token.clone()
+            } else {
+                None
             }
-            if let Some(refresh) = &token.refresh_token {
-                drop(cache);
-                let response = client
-                    .exchange_refresh_token(&RefreshToken::new(refresh.clone()))
-                    .request_async(async_http_client)
-                    .await
-                    .map_err(|err| OAuthError::Other(err.into()))?;
-                let mut cache = self.cache.lock();
-                let new_token = TokenSet::from_response(&response)?;
-                self.storage.store(&new_token)?;
-                *cache = Some(new_token.clone());
-                return Ok(Some(new_token.access_token));
-            }
+        };
+
+        if let Some(refresh) = refresh_token {
+            let response = client
+                .exchange_refresh_token(&RefreshToken::new(refresh.clone()))
+                .request_async(async_http_client)
+                .await
+                .map_err(|err| OAuthError::Other(err.into()))?;
+            let new_token = TokenSet::from_response(&response)?;
+            self.storage.store(&new_token)?;
+            let mut cache = self.cache.lock();
+            *cache = Some(new_token.clone());
+            return Ok(Some(new_token.access_token));
         }
+
         Ok(None)
     }
 
@@ -163,7 +164,7 @@ impl OAuthController {
         if let Some(token) = self.refresh_if_needed(client).await? {
             return Ok(Some(token));
         }
-        let mut cache = self.cache.lock();
+        let cache = self.cache.lock();
         if let Some(token) = cache.clone() {
             return Ok(Some(token.access_token));
         }
@@ -187,13 +188,14 @@ impl AccessTokenProvider for OAuthController {
         if let Some(token) = self.refresh_if_needed(client).await? {
             return Ok(token);
         }
-        let cache = self.cache.lock();
-        if let Some(token) = cache.clone() {
-            if !token.is_expired() {
-                return Ok(token.access_token);
+        {
+            let cache = self.cache.lock();
+            if let Some(token) = cache.clone() {
+                if !token.is_expired() {
+                    return Ok(token.access_token);
+                }
             }
         }
-        drop(cache);
         self.token_from_storage()
             .await?
             .ok_or(OAuthError::NotAuthorised)
@@ -223,9 +225,11 @@ struct TokenSet {
 }
 
 impl TokenSet {
-    fn from_response(
-        response: &dyn TokenResponse<AccessToken = AccessToken, RefreshToken = RefreshToken>,
-    ) -> Result<Self> {
+    fn from_response<TR, TT>(response: &TR) -> Result<Self>
+    where
+        TR: TokenResponse<TT>,
+        TT: TokenType,
+    {
         let access_token = response.access_token().secret().to_string();
         let refresh_token = response
             .refresh_token()
@@ -251,6 +255,7 @@ impl TokenSet {
     }
 }
 
+#[derive(Clone, Default)]
 struct TokenStorage;
 
 impl TokenStorage {

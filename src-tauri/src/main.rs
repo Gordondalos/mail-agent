@@ -14,9 +14,12 @@ use gmail::{wait_for_authorisation, GmailClient};
 use notifier::NotificationQueue;
 use oauth::{ensure_autostart, AccessTokenProvider, OAuthController, OAuthError};
 use tauri::{
-    CustomMenuItem, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem,
+    menu::{MenuBuilder, MenuItem},
+    tray::TrayIconBuilder,
+    AppHandle, Emitter, Manager,
 };
 use tauri_plugin_autostart::MacosLauncher;
+use tokio::time::sleep;
 use tracing::warn;
 
 #[derive(Clone)]
@@ -28,7 +31,7 @@ struct AppState {
 }
 
 impl AppState {
-    async fn poll_once(&self, app: &tauri::AppHandle) -> Result<()> {
+    async fn poll_once(&self, app: &AppHandle) -> Result<()> {
         if !self.oauth.is_configured() {
             return Ok(());
         }
@@ -61,7 +64,7 @@ impl AppState {
         Ok(())
     }
 
-    async fn mark_read(&self, id: &str) -> Result<(), OAuthError> {
+    async fn mark_read(&self, id: &str) -> Result<()> {
         self.gmail.mark_read(id).await
     }
 }
@@ -85,7 +88,7 @@ struct InitialPayload {
 
 #[tauri::command]
 async fn request_authorisation(
-    app: tauri::AppHandle,
+    app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
     state
@@ -107,7 +110,7 @@ async fn revoke(state: tauri::State<'_, AppState>) -> Result<(), String> {
 
 #[tauri::command]
 async fn update_settings(
-    app: tauri::AppHandle,
+    app: AppHandle,
     state: tauri::State<'_, AppState>,
     update: SettingsUpdate,
 ) -> Result<Settings, String> {
@@ -116,7 +119,7 @@ async fn update_settings(
         .update(update)
         .map_err(|err| err.to_string())?;
     ensure_autostart(&app, settings.auto_launch);
-    if let Err(err) = app.emit_all("gmail://settings", &settings) {
+    if let Err(err) = app.emit("gmail://settings", &settings) {
         warn!(%err, "failed to broadcast settings");
     }
     Ok(settings)
@@ -129,7 +132,7 @@ async fn check_now(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> 
 
 #[tauri::command]
 async fn mark_message_read(
-    app: tauri::AppHandle,
+    app: AppHandle,
     state: tauri::State<'_, AppState>,
     message_id: String,
 ) -> Result<(), String> {
@@ -146,7 +149,7 @@ async fn mark_message_read(
 
 #[tauri::command]
 async fn open_in_browser(
-    app: tauri::AppHandle,
+    app: AppHandle,
     state: tauri::State<'_, AppState>,
     url: String,
 ) -> Result<(), String> {
@@ -154,12 +157,14 @@ async fn open_in_browser(
         .notifier
         .complete_current(&app)
         .map_err(|err| err.to_string())?;
-    webbrowser::open(&url).map_err(|err| err.to_string()).map(|_| ())
+    webbrowser::open(&url)
+        .map_err(|err| err.to_string())
+        .map(|_| ())
 }
 
 #[tauri::command]
 async fn dismiss_notification(
-    app: tauri::AppHandle,
+    app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
     state
@@ -168,19 +173,58 @@ async fn dismiss_notification(
         .map_err(|err| err.to_string())
 }
 
-fn build_tray() -> SystemTray {
-    let check_now = CustomMenuItem::new("check_now", "Проверить сейчас");
-    let auth = CustomMenuItem::new("auth", "Войти в Gmail");
-    let logout = CustomMenuItem::new("logout", "Выйти");
-    let quit = CustomMenuItem::new("quit", "Выйти из приложения");
-    let tray_menu = SystemTrayMenu::new()
-        .add_item(check_now)
-        .add_native_item(SystemTrayMenuItem::Separator)
-        .add_item(auth)
-        .add_item(logout)
-        .add_native_item(SystemTrayMenuItem::Separator)
-        .add_item(quit);
-    SystemTray::new().with_menu(tray_menu)
+fn register_tray(app: &tauri::App) -> tauri::Result<()> {
+    let check_now = MenuItem::with_id(app, "check_now", "Проверить сейчас", true, None::<&str>)?;
+    let auth = MenuItem::with_id(app, "auth", "Войти в Gmail", true, None::<&str>)?;
+    let logout = MenuItem::with_id(app, "logout", "Выйти", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Выйти из приложения", true, None::<&str>)?;
+
+    let menu = MenuBuilder::new(app)
+        .item(&check_now)
+        .separator()
+        .item(&auth)
+        .item(&logout)
+        .separator()
+        .item(&quit)
+        .build()?;
+
+    TrayIconBuilder::new()
+        .menu(&menu)
+        .on_menu_event(|app_handle, event| match event.id().as_ref() {
+            "check_now" => {
+                let poll_handle = app_handle.clone();
+                let app_state = poll_handle.state::<AppState>().inner().clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(err) = app_state.poll_once(&poll_handle).await {
+                        warn!(%err, "manual poll failed");
+                    }
+                });
+            }
+            "auth" => {
+                let auth_handle = app_handle.clone();
+                let app_state = auth_handle.state::<AppState>().inner().clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(err) = app_state.oauth.authorise(&auth_handle).await {
+                        warn!(%err, "authorisation from tray failed");
+                    }
+                });
+            }
+            "logout" => {
+                let app_state = app_handle.state::<AppState>().inner().clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(err) = app_state.oauth.revoke().await {
+                        warn!(%err, "failed to revoke tokens");
+                    }
+                });
+            }
+            "quit" => {
+                app_handle.exit(0);
+            }
+            _ => {}
+        })
+        .build(app)?;
+
+    Ok(())
 }
 
 fn main() {
@@ -190,50 +234,19 @@ fn main() {
         .init();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
-        .system_tray(build_tray())
-        .on_system_tray_event(|app, event| match event {
-            SystemTrayEvent::MenuItemClick { id, .. } => match id.as_str() {
-                "check_now" => {
-                    let app_handle = app.handle();
-                    let state = app.state::<AppState>();
-                    tauri::async_runtime::spawn(async move {
-                        if let Err(err) = state.poll_once(&app_handle).await {
-                            warn!(%err, "manual poll failed");
-                        }
-                    });
-                }
-                "auth" => {
-                    let app_handle = app.handle();
-                    let state = app.state::<AppState>();
-                    tauri::async_runtime::spawn(async move {
-                        if let Err(err) = state.oauth.authorise(&app_handle).await {
-                            warn!(%err, "authorisation from tray failed");
-                        }
-                    });
-                }
-                "logout" => {
-                    let state = app.state::<AppState>();
-                    tauri::async_runtime::spawn(async move {
-                        if let Err(err) = state.oauth.revoke().await {
-                            warn!(%err, "failed to revoke tokens");
-                        }
-                    });
-                }
-                "quit" => {
-                    std::process::exit(0);
-                }
-                _ => {}
-            },
-            _ => {}
-        })
+        .plugin(tauri_plugin_autostart::init(
+            MacosLauncher::LaunchAgent,
+            Some(vec!["--hidden"]),
+        ))
         .setup(|app| {
-            let settings = Arc::new(SettingsManager::initialize(app.handle())?);
+            let app_handle = app.handle();
+            let settings = Arc::new(SettingsManager::initialize(&app_handle)?);
             let oauth = Arc::new(OAuthController::new(settings.clone()));
             oauth.load_cached();
             let token_provider: Arc<dyn AccessTokenProvider> = oauth.clone();
             let gmail = Arc::new(GmailClient::new(token_provider)?);
             let notifier = Arc::new(NotificationQueue::new());
+
             app.manage(AppState {
                 settings: settings.clone(),
                 oauth: oauth.clone(),
@@ -241,32 +254,19 @@ fn main() {
                 notifier: notifier.clone(),
             });
 
-            let app_handle = app.handle();
             ensure_autostart(&app_handle, settings.get().auto_launch);
 
-            tauri::WindowBuilder::new(
-                app,
-                "alert",
-                tauri::WindowUrl::App("index.html?view=alert".into()),
-            )
-            .inner_size(650.0, 150.0)
-            .always_on_top(true)
-            .decorations(false)
-            .transparent(true)
-            .visible(false)
-            .resizable(false)
-            .skip_taskbar(true)
-            .build()?;
+            register_tray(app)?;
 
-            let state = app.state::<AppState>().clone();
+            let app_state = app.state::<AppState>().inner().clone();
             let poll_handle = app_handle.clone();
             tauri::async_runtime::spawn(async move {
                 loop {
-                    let interval = state.settings.get().poll_interval_secs;
-                    if let Err(err) = state.poll_once(&poll_handle).await {
+                    let interval = app_state.settings.get().poll_interval_secs;
+                    if let Err(err) = app_state.poll_once(&poll_handle).await {
                         warn!(%err, "polling failed");
                     }
-                    tauri::async_runtime::sleep(Duration::from_secs(interval.max(15))).await;
+                    sleep(Duration::from_secs(interval.max(15))).await;
                 }
             });
 
@@ -282,10 +282,6 @@ fn main() {
             open_in_browser,
             dismiss_notification
         ])
-        .plugin(tauri_plugin_autostart::init(
-            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            None,
-        ))
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
