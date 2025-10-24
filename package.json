@@ -7,7 +7,8 @@
     "install:macos": "xcode-select --install && brew install node && curl https://sh.rustup.rs -sSf | sh -s -- -y && source \"$HOME/.cargo/env\" && cargo install tauri-cli",
     "install:linux": "bash scripts/setup.sh --auto",
     "start": "node scripts/dev.js",
-    "build": "node scripts/build.js"
+    "build": "node scripts/build.js",
+    "debug": "node scripts/debug.js"
   },
   "keywords": [
     "tauri",
