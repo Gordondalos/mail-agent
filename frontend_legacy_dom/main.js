@@ -199,11 +199,43 @@ function buildSettingsForm(settings) {
 
   const submitRow = document.createElement('div');
   submitRow.className = 'actions';
+  const importBtn = document.createElement('button');
+  importBtn.type = 'button';
+  importBtn.className = 'secondary';
+  importBtn.textContent = 'Импортировать client_secret.json';
+
+  // file input (hidden) to load Google OAuth client JSON
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = '.json,application/json';
+  fileInput.style.display = 'none';
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      const cfg = json.installed || json.web || json;
+      const cid = cfg.client_id || cfg.clientId || '';
+      const csec = cfg.client_secret || cfg.clientSecret || '';
+      if (cid) clientInput.value = cid;
+      if (csec) secretInput.value = csec;
+      importBtn.textContent = 'Импортировано';
+      setTimeout(() => (importBtn.textContent = 'Импортировать client_secret.json'), 2000);
+    } catch (e) {
+      alert('Не удалось импортировать JSON: ' + e);
+    } finally {
+      fileInput.value = '';
+    }
+  });
+
+  importBtn.addEventListener('click', () => fileInput.click());
+
   const submitBtn = document.createElement('button');
   submitBtn.type = 'submit';
   submitBtn.className = 'primary';
   submitBtn.textContent = 'Сохранить настройки';
-  submitRow.append(submitBtn);
+  submitRow.append(importBtn, submitBtn, fileInput);
 
   form.append(
     intervalField,
