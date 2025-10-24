@@ -30,7 +30,7 @@
         "transparent": true,
         "alwaysOnTop": true,
         "skipTaskbar": true,
-        "url": "/alert"
+        "url": "/?view=alert"
       }
     ]
   },

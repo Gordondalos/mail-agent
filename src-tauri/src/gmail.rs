@@ -182,6 +182,7 @@ struct MessageRef {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct Message {
     id: String,
     thread_id: String,
@@ -247,5 +248,40 @@ pub async fn wait_for_authorisation(token_provider: Arc<dyn AccessTokenProvider>
             false
         }
         Err(_) => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_camel_case_message_payload() {
+        let json = r#"
+        {
+            "id": "abc",
+            "threadId": "thread-1",
+            "snippet": "hello",
+            "internalDate": "169",
+            "payload": {
+                "headers": [
+                    { "name": "Subject", "value": "Test subject" },
+                    { "name": "From", "value": "Sender <sender@example.com>" },
+                    { "name": "Date", "value": "Thu, 24 Oct 2024 15:30:00 +0000" }
+                ]
+            }
+        }
+        "#;
+
+        let message: Message = serde_json::from_str(json).expect("message parses");
+        assert_eq!(message.id, "abc");
+        assert_eq!(message.thread_id, "thread-1");
+        assert_eq!(message.snippet.as_deref(), Some("hello"));
+
+        let notification = message.into_notification();
+        assert_eq!(notification.subject, "Test subject");
+        assert_eq!(notification.sender.as_deref(), Some("Sender <sender@example.com>"));
+        assert_eq!(notification.thread_id, "thread-1");
+        assert!(notification.received_at.is_some(), "date header converted");
     }
 }
