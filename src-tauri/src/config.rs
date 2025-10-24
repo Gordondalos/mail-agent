@@ -27,7 +27,7 @@ impl Default for Settings {
             sound_enabled: true,
             sound_path: None,
             auto_launch: true,
-            gmail_query: "is:unread category:primary".to_string(),
+            gmail_query: "in:inbox is:unread".to_string(),
             oauth_client_id: String::new(),
             oauth_client_secret: None,
             playback_volume: 0.7,
