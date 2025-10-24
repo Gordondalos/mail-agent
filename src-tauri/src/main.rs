@@ -95,7 +95,7 @@ async fn request_authorisation(
         .oauth
         .authorise(&app)
         .await
-        .map_err(|err| err.to_string())?;
+        .map_err(|err| format!("{err:?}"))?;
     state.oauth.load_cached();
     state.poll_once(&app).await.map_err(|err| err.to_string())?;
     Ok(())
