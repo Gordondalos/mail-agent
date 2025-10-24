@@ -7,7 +7,7 @@
 Ниже — краткий путь, как запустить и настроить приложение у себя локально.
 
 1) Подготовьте OAuth2 в Google (один раз):
-- Создайте OAuth Client ID типа Desktop App и добавьте redirect URI `http://localhost:42813/oauth2callback` (см. раздел «Подготовка OAuth2» ниже).
+- Создайте OAuth Client ID типа Desktop App (см. раздел «Подготовка OAuth2» ниже). Для Desktop App не нужно вручную добавлять redirect URI — приложение само слушает `http://localhost:42813/oauth2callback`.
 
 2) Установите зависимости для вашей ОС:
 - Windows: запустите PowerShell-скрипт `scripts\setup.ps1 -Auto` (или поставьте всё вручную — см. раздел ниже).
@@ -64,18 +64,28 @@ spec-kit/            # Подмодуль Spec Kit для спецификаци
 
 ## Подготовка OAuth2
 
-1. В [Google Cloud Console](https://console.cloud.google.com/apis/credentials) создайте OAuth Client ID типа **Desktop App**.
-2. Добавьте в настройках клиента авторизованный redirect URI: `http://localhost:42813/oauth2callback`.
-3. Скопируйте `Client ID` и (опционально) `Client Secret` и вставьте их в настройках приложения (основное окно).
+Нужно один раз создать OAuth‑клиент в Google Cloud Console. Далее этим клиентом могут пользоваться все пользователи вашего приложения.
+
+Шаги:
+- Настройте OAuth consent screen (External). Если приложение в режиме Testing, добавьте e‑mail пользователей в Test users.
+- Создайте OAuth Client ID типа «Desktop App». Для Desktop App Google не требует настраивать redirect URI — локальный редирект `http://localhost:42813/oauth2callback` допустим по умолчанию.
+- Скопируйте `Client ID` и, при желании, `Client Secret`.
+
+Как использовать в приложении:
+- Откройте окно настроек и вставьте `Client ID`. `Client Secret` опционален (используем PKCE; секрет не обязателен для Desktop App).
+- Нажмите «Войти в Gmail» и завершите OAuth в браузере. Токены сохраняются только локально в системном хранилище (keychain), секреты — в `settings.json` (см. раздел «Настройки»).
+
+Распространение среди друзей/коллег:
+- Достаточно одного OAuth Client ID на всё приложение. Пользователям не нужно создавать свои ключи — они просто авторизуются через ваше приложение.
+- Если у вас включён режим Testing в OAuth consent screen, добавьте их e‑mail в Test users. Иначе они увидят предупреждение «Unverified app» или не смогут войти.
 
 ## Настройки
 
-Настройки сохраняются в `settings.json` в директории конфигурации Tauri для вашей платформы:
-- macOS: `~/Library/Application Support/com.example.gmailtray/settings.json`
-- Windows: `%APPDATA%\com.example.gmailtray\settings.json`
-- Linux: `~/.config/com.example.gmailtray/settings.json`
+Настройки сохраняются в файле `settings.json` в платформенной директории конфигурации, определяемой через `directories::ProjectDirs` с идентификатором `org/kreditpro/GmailTrayNotifier`.
 
-Параметры можно редактировать через UI или вручную (JSON):
+Примечание: точный путь зависит от ОС (например, `%APPDATA%\org\kreditpro\GmailTrayNotifier\settings.json` на Windows, `~/Library/Application Support/org.kreditpro.GmailTrayNotifier/settings.json` на macOS, `~/.config/org.kreditpro/GmailTrayNotifier/settings.json` на Linux).
+
+Параметры можно менять через UI или вручную (JSON):
 
 ```json
 {
@@ -89,6 +99,13 @@ spec-kit/            # Подмодуль Spec Kit для спецификаци
   "playback_volume": 0.7
 }
 ```
+
+FAQ по OAuth и запуску:
+- Нужно ли получать Client ID и Secret? Да, нужен один OAuth Client ID типа Desktop App. Secret не обязателен (PKCE), но можно хранить локально.
+- Куда класть ключи? Введите в настройках приложения. Они сохраняются в `settings.json`; токены доступа — в системном keychain.
+- Сколько раз получать ключи? Один раз на приложение. Все пользователи могут использовать один и тот же Client ID.
+- Должны ли друзья делать то же самое? Нет. Им достаточно авторизоваться в вашем приложении. Если консент‑экран в режиме Testing — добавьте их e‑mail в Test users.
+- Где это работает? На Windows/macOS/Linux. Редирект идёт на `http://localhost:42813/oauth2callback` в системном браузере; убедитесь, что фаервол не блокирует localhost.
 
 ## Установка зависимостей (Windows)
 
