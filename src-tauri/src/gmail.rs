@@ -67,7 +67,9 @@ impl GmailClient {
         }
 
         if response.status().is_client_error() {
-            bail!("gmail list returned status {}", response.status());
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            bail!("gmail list returned status {status} body={body}");
         }
 
         let list: MessageList = response
@@ -113,7 +115,9 @@ impl GmailClient {
         }
 
         if !response.status().is_success() {
-            bail!("gmail message returned status {}", response.status());
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            bail!("gmail message returned status {status} body={body}");
         }
 
         let details: Message = response
@@ -140,7 +144,9 @@ impl GmailClient {
         }
 
         if !response.status().is_success() {
-            bail!("gmail modify returned status {}", response.status());
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            bail!("gmail modify returned status {status} body={body}");
         }
 
         Ok(())

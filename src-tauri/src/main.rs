@@ -14,8 +14,9 @@ use gmail::{wait_for_authorisation, GmailClient};
 use notifier::NotificationQueue;
 use oauth::{ensure_autostart, AccessTokenProvider, OAuthController, OAuthError};
 use tauri::{
+    image::Image,
     menu::{MenuBuilder, MenuItem},
-    tray::TrayIconBuilder,
+    tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager,
 };
 use tauri_plugin_autostart::MacosLauncher;
@@ -98,6 +99,10 @@ async fn request_authorisation(
     res.map_err(stringify_error)?;
     state.oauth.load_cached();
     state.poll_once(&app).await.map_err(|err| err.to_string())?;
+    // Hide settings window after successful authorisation, leave in tray
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.hide();
+    }
     Ok(())
 }
 
@@ -186,12 +191,14 @@ async fn dismiss_notification(
 
 fn register_tray(app: &tauri::App) -> tauri::Result<()> {
     let check_now = MenuItem::with_id(app, "check_now", "Проверить сейчас", true, None::<&str>)?;
+    let open_settings = MenuItem::with_id(app, "open_settings", "Открыть настройки", true, None::<&str>)?;
     let auth = MenuItem::with_id(app, "auth", "Войти в Gmail", true, None::<&str>)?;
     let logout = MenuItem::with_id(app, "logout", "Выйти", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Выйти из приложения", true, None::<&str>)?;
 
     let menu = MenuBuilder::new(app)
         .item(&check_now)
+        .item(&open_settings)
         .separator()
         .item(&auth)
         .item(&logout)
@@ -199,8 +206,15 @@ fn register_tray(app: &tauri::App) -> tauri::Result<()> {
         .item(&quit)
         .build()?;
 
+    let tray_icon = Image::from_path("icons/icon.ico")
+        .unwrap_or_else(|_| app.default_window_icon().cloned().expect("missing default icon"));
+
     TrayIconBuilder::new()
+        .icon(tray_icon)
         .menu(&menu)
+        .tooltip("Gmail Tray Notifier")
+        // Оставим меню на правый клик, а левый клик — показать/скрыть окно
+        .show_menu_on_left_click(false)
         .on_menu_event(|app_handle, event| match event.id().as_ref() {
             "check_now" => {
                 let poll_handle = app_handle.clone();
@@ -210,6 +224,12 @@ fn register_tray(app: &tauri::App) -> tauri::Result<()> {
                         warn!(%err, "manual poll failed");
                     }
                 });
+            }
+            "open_settings" => {
+                if let Some(win) = app_handle.get_webview_window("main") {
+                    let _ = win.show();
+                    let _ = win.set_focus();
+                }
             }
             "auth" => {
                 let auth_handle = app_handle.clone();
@@ -230,6 +250,22 @@ fn register_tray(app: &tauri::App) -> tauri::Result<()> {
             }
             "quit" => {
                 app_handle.exit(0);
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| match event {
+            TrayIconEvent::Click { button, .. } | TrayIconEvent::DoubleClick { button, .. } => {
+                if button == MouseButton::Left {
+                    let handle = tray.app_handle();
+                    if let Some(win) = handle.get_webview_window("main") {
+                        if win.is_visible().unwrap_or(false) {
+                            let _ = win.hide();
+                        } else {
+                            let _ = win.show();
+                            let _ = win.set_focus();
+                        }
+                    }
+                }
             }
             _ => {}
         })
@@ -278,6 +314,17 @@ fn main() {
             ensure_autostart(&app_handle, settings.get().auto_launch);
 
             register_tray(app)?;
+
+            // На старте скрываем окно, если уже авторизованы
+            let hide_handle = app_handle.clone();
+            let provider: Arc<dyn AccessTokenProvider> = oauth.clone();
+            tauri::async_runtime::spawn(async move {
+                if wait_for_authorisation(provider).await {
+                    if let Some(win) = hide_handle.get_webview_window("main") {
+                        let _ = win.hide();
+                    }
+                }
+            });
 
             let app_state = app.state::<AppState>().inner().clone();
             let poll_handle = app_handle.clone();

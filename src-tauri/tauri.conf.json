@@ -32,10 +32,7 @@
         "skipTaskbar": true,
         "url": "/alert"
       }
-    ],
-    "trayIcon": {
-      "iconPath": "icons/icon.ico"
-    }
+    ]
   },
   "bundle": {
     "active": true,

@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use anyhow::Result;
 use parking_lot::Mutex;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tracing::warn;
 
 use crate::gmail::GmailNotification;
@@ -38,16 +38,18 @@ impl NotificationQueue {
         Ok(())
     }
 
-    pub fn complete_current(&self, app: &AppHandle) -> Result<()> {
-        let mut state = self.inner.lock();
-        state.current = None;
-        if let Some(next) = state.pending.pop_front() {
-            state.current = Some(next.clone());
-            drop(state);
-            emit_notification(app, next)?;
-        }
-        Ok(())
+pub fn complete_current(&self, app: &AppHandle) -> Result<()> {
+    let mut state = self.inner.lock();
+    state.current = None;
+    if let Some(next) = state.pending.pop_front() {
+        state.current = Some(next.clone());
+        drop(state);
+        emit_notification(app, next)?;
+    } else if let Some(win) = app.get_webview_window("alert") {
+        let _ = win.hide();
     }
+    Ok(())
+}
 
     pub fn clear(&self) {
         let mut state = self.inner.lock();
@@ -57,6 +59,10 @@ impl NotificationQueue {
 }
 
 fn emit_notification(app: &AppHandle, notification: GmailNotification) -> Result<()> {
+    if let Some(win) = app.get_webview_window("alert") {
+        let _ = win.show();
+        let _ = win.set_focus();
+    }
     app.emit("gmail://notification", &notification)?;
     Ok(())
 }
