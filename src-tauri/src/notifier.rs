@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use anyhow::Result;
 use parking_lot::Mutex;
 use serde::Serialize;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter};
 use tracing::warn;
 
 use crate::gmail::GmailNotification;
@@ -57,7 +57,7 @@ impl NotificationQueue {
 }
 
 fn emit_notification(app: &AppHandle, notification: GmailNotification) -> Result<()> {
-    app.emit_all("gmail://notification", &notification)?;
+    app.emit("gmail://notification", &notification)?;
     Ok(())
 }
 
@@ -67,7 +67,7 @@ pub struct NotificationResult {
 }
 
 pub fn notify_dismissed(app: &AppHandle, handled: bool) {
-    if let Err(err) = app.emit_all(
+    if let Err(err) = app.emit(
         "gmail://notification-complete",
         &NotificationResult { handled },
     ) {
