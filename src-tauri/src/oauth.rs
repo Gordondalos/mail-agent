@@ -16,7 +16,7 @@ use tauri::AppHandle;
 use tokio::net::TcpListener;
 use tokio::sync::OnceCell;
 use tokio::time::timeout;
-use tracing::warn;
+use tracing::{debug, warn};
 
 use crate::config::SettingsManager;
 
@@ -101,9 +101,11 @@ impl OAuthController {
             ))
             .url();
 
+        debug!(url = %auth_url, "oauth: open browser for authorisation");
         webbrowser::open(&auth_url.to_string()).map_err(|err| OAuthError::Other(err.into()))?;
 
         let code = wait_for_code(csrf_state.secret()).await?;
+        debug!("oauth: received authorisation code, exchanging for token");
         let token_response = client
             .exchange_code(AuthorizationCode::new(code))
             .set_pkce_verifier(pkce_verifier)
@@ -112,6 +114,12 @@ impl OAuthController {
             .map_err(|err| OAuthError::Other(err.into()))?;
 
         let token_set = TokenSet::from_response(&token_response)?;
+        debug!(
+            access_token_len = token_set.access_token.len(),
+            has_refresh = token_set.refresh_token.is_some(),
+            expires_at = ?token_set.expires_at,
+            "oauth: token received"
+        );
         self.storage.store(&token_set)?;
         {
             let mut cache = self.cache.lock();
