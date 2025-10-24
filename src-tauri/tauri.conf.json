@@ -1,32 +1,15 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "package": {
-    "productName": "Gmail Tray Notifier",
-    "version": "0.1.0"
-  },
+  "identifier": "org.kreditpro.gmailtraynotifier",
+  "productName": "Gmail Tray Notifier",
+  "version": "0.1.0",
   "build": {
     "beforeBuildCommand": "",
     "beforeDevCommand": "",
-    "devPath": "../frontend",
-    "distDir": "../frontend"
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../frontend"
   },
-  "tauri": {
-    "bundle": {
-      "active": true,
-      "targets": "all",
-      "identifier": "com.example.gmailtray"
-    },
-    "security": {
-      "csp": null
-    },
-    "allowlist": {
-      "shell": {
-        "all": true
-      },
-      "fs": {
-        "all": true
-      }
-    },
+  "app": {
     "windows": [
       {
         "label": "main",
@@ -37,5 +20,9 @@
         "resizable": true
       }
     ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all"
   }
 }

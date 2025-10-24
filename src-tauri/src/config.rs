@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use tauri::api::path::app_config_dir;
+use directories::ProjectDirs;
 use tauri::AppHandle;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -102,8 +102,10 @@ impl SettingsManager {
 }
 
 fn ensure_settings_path(app: &AppHandle) -> Result<PathBuf> {
-    let mut dir =
-        app_config_dir(&app.config()).context("Unable to resolve configuration directory")?;
+    // Use directories crate to determine a config directory compatible with Tauri v2
+    let proj = ProjectDirs::from("org", "kreditpro", "GmailTrayNotifier")
+        .context("Unable to resolve configuration directory")?;
+    let mut dir = proj.config_dir().to_path_buf();
     if !dir.exists() {
         fs::create_dir_all(&dir).context("Failed to create configuration directory")?;
     }

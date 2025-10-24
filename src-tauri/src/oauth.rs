@@ -12,7 +12,6 @@ use oauth2::{
 };
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use tauri::api::shell;
 use tauri::AppHandle;
 use tokio::net::TcpListener;
 use tokio::sync::OnceCell;
@@ -106,7 +105,7 @@ impl OAuthController {
             ))
             .url();
 
-        shell::open(&app.shell_scope(), auth_url.to_string(), None)
+        webbrowser::open(&auth_url.to_string())
             .map_err(|err| OAuthError::Other(err.into()))?;
 
         let code = wait_for_code(csrf_state.secret()).await?;

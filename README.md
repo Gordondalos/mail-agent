@@ -2,6 +2,35 @@
 
 Кроссплатформенное Tauri-приложение, которое висит в системном трее, проверяет непрочитанные письма Gmail и показывает кастомный полупрозрачный алерт 650×150 с кнопками «Перейти» и «Прочитано», а также воспроизводит звук уведомления.
 
+## Быстрый старт
+
+Ниже — краткий путь, как запустить и настроить приложение у себя локально.
+
+1) Подготовьте OAuth2 в Google (один раз):
+- Создайте OAuth Client ID типа Desktop App и добавьте redirect URI `http://localhost:42813/oauth2callback` (см. раздел «Подготовка OAuth2» ниже).
+
+2) Установите зависимости для вашей ОС:
+- Windows: запустите PowerShell-скрипт `scripts\setup.ps1 -Auto` (или поставьте всё вручную — см. раздел ниже).
+- macOS: выполните команды из раздела «Установка зависимостей (macOS)».
+- Linux: запустите `bash scripts/setup.sh --auto` (или поставьте всё вручную — см. раздел ниже).
+
+3) Запуск в dev-режиме:
+- В корне проекта выполните:
+  - Windows/Linux/macOS:
+    - Перейдите в каталог `src-tauri` и выполните `cargo tauri dev`.
+
+4) Первая настройка в приложении:
+- В основном окне откройте «Настройки» и вставьте ваши `Client ID` и (опционально) `Client Secret`.
+- При первом входе нажмите «Войти в Gmail» — откроется браузер с OAuth2.
+- При желании укажите интервал опроса, путь к звуку, громкость, автозапуск и Gmail-запрос (по умолчанию: `is:unread category:primary`).
+
+5) Использование:
+- При новых письмах появится полупрозрачный алерт 650×150 с кнопками:
+  - «Перейти» — открыть письмо в браузере;
+  - «Прочитано» — снять метку `UNREAD` с письма.
+
+Если нужен installers/дистрибутив — соберите релиз командой `cargo tauri build` (см. раздел «Сборка и запуск»).
+
 ## Возможности
 
 - Авторизация через Google OAuth2 с использованием PKCE и локального редиректа `http://localhost:42813/oauth2callback`.
@@ -54,12 +83,195 @@ src-tauri/           # Rust-бэкенд Tauri
 }
 ```
 
+## Установка зависимостей (Windows)
+
+Есть два пути: автоматизированный (рекомендуется) и ручной.
+
+- Автоматизированный: используйте скрипт PowerShell `scripts\\setup.ps1`. Он проверит наличие всего, что нужно, и при флаге `-Auto` попытается установить недостающие глобальные зависимости через winget/choco/scoop, включая Rust, Node.js, WebView2 и Tauri CLI.
+- Ручной: установите каждую зависимость командами ниже.
+
+1) Автоматизированная установка
+
+1. Откройте PowerShell от имени пользователя (или администратора — так выше шанс автоустановки глобальных пакетов).
+2. В корне репозитория выполните:
+
+```powershell
+pwsh -File .\scripts\setup.ps1 -Auto
+```
+
+Опции скрипта:
+- `-Auto` — попытаться автоматически установить недостающие компоненты через winget/choco/scoop (если доступны).
+- `-Dev` — после проверки запустить `cargo tauri dev`.
+- `-Build` — после проверки запустить `cargo tauri build`.
+
+Примеры:
+
+```powershell
+# Автоустановка всего и запуск dev
+pwsh -File .\scripts\setup.ps1 -Auto -Dev
+
+# Только проверка без установки
+pwsh -File .\scripts\setup.ps1
+```
+
+2) Ручная установка (однострочники)
+
+Выполните по возможности один из наборов команд (любой пакетный менеджер):
+
+- Через winget:
+
+```powershell
+winget install -e --id OpenJS.NodeJS.LTS ; `
+winget install -e --id Rustlang.Rustup ; `
+winget install -e --id Microsoft.EdgeWebView2Runtime ; `
+winget install -e --id Microsoft.VisualStudio.2022.BuildTools
+```
+
+После установки rustup выполните (однократно) настройку MSVC toolchain:
+
+```powershell
+rustup default stable-x86_64-pc-windows-msvc
+rustup component add rust-src
+```
+
+- Через Chocolatey:
+
+```powershell
+choco install -y nodejs-lts rustup.install microsoft-edge-webview2-runtime visualstudio2022buildtools
+```
+
+- Через Scoop (если установлен):
+
+```powershell
+scoop install nodejs-lts
+```
+
+Установка Tauri CLI (любой вариант):
+
+```powershell
+# через cargo (предпочтительно)
+cargo install tauri-cli
+# либо через npm
+yarn global add @tauri-apps/cli  # или: npm i -g @tauri-apps/cli
+```
+
+Требуемые компоненты (Windows):
+- Node.js (LTS) и npm
+- Rust (rustup/cargo) с MSVC toolchain (stable-x86_64-pc-windows-msvc)
+- Visual Studio Build Tools (Desktop development with C++)
+- WebView2 Runtime
+- Tauri CLI (`cargo install tauri-cli` или `npm i -g @tauri-apps/cli`)
+
+## Установка зависимостей (macOS)
+
+Для macOS достаточно установить Xcode Command Line Tools, Node.js, Rust и Tauri CLI. Рекомендуется использовать Homebrew.
+
+1) Быстрый старт через Homebrew
+
+```bash
+# Установите Homebrew, если его нет: https://brew.sh/
+xcode-select --install               # Xcode Command Line Tools (однократно)
+brew install node                    # Node.js + npm
+# Rustup
+curl https://sh.rustup.rs -sSf | sh -s -- -y
+source "$HOME/.cargo/env"
+# Tauri CLI (через cargo или npm)
+cargo install tauri-cli  # или: npm i -g @tauri-apps/cli
+```
+
+2) Примечания (macOS)
+- Если при сборке падают нативные зависимости, обновите CLT: `xcode-select --install`.
+- На macOS используется WebView (входит в систему), дополнительных WebKitGTK пакетов не требуется.
+- После установки rustup выполните `source "$HOME/.cargo/env"` в текущей сессии или перезапустите терминал.
+
+## Установка зависимостей (Linux)
+
+Для Linux добавлен скрипт `scripts/setup.sh`, который умеет автоматически ставить всё необходимое на дистрибутивах Debian/Ubuntu (apt), Fedora (dnf) и Arch (pacman).
+
+1) Автоматизированная установка
+
+```bash
+bash scripts/setup.sh --auto
+# Автоустановка и запуск dev
+bash scripts/setup.sh --auto --dev
+```
+
+Что установится:
+- Системные библиотеки для Tauri (WebKitGTK, GTK3, appindicator, OpenSSL, pkg-config, инструменты сборки)
+- Node.js и npm
+- Rust (rustup + cargo)
+- Tauri CLI (через cargo или npm — в зависимости от доступности)
+
+2) Ручная установка по дистрибутивам
+
+- Debian/Ubuntu:
+
+```bash
+sudo apt update
+# Системные зависимости
+if apt-cache show libwebkit2gtk-4.1-dev >/dev/null 2>&1; then \
+  sudo apt install -y build-essential curl wget libssl-dev pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev; \
+else \
+  sudo apt install -y build-essential curl wget libssl-dev pkg-config libgtk-3-dev libwebkit2gtk-4.0-dev libayatana-appindicator3-dev librsvg2-dev; \
+fi
+# Node.js + npm
+sudo apt install -y nodejs npm
+# Rustup + cargo
+curl https://sh.rustup.rs -sSf | sh -s -- -y
+source "$HOME/.cargo/env"
+# Tauri CLI
+cargo install tauri-cli  # или: npm i -g @tauri-apps/cli
+```
+
+- Fedora:
+
+```bash
+# Системные зависимости
+if dnf info webkit2gtk4.1-devel >/dev/null 2>&1; then \
+  sudo dnf install -y @"Development Tools" curl wget openssl-devel pkgconf-pkg-config gtk3-devel webkit2gtk4.1-devel libappindicator-gtk3 librsvg2-devel; \
+else \
+  sudo dnf install -y @"Development Tools" curl wget openssl-devel pkgconf-pkg-config gtk3-devel webkit2gtk3-devel libappindicator-gtk3 librsvg2-devel; \
+fi
+# Node.js + npm
+sudo dnf install -y nodejs npm
+# Rustup + cargo
+curl https://sh.rustup.rs -sSf | sh -s -- -y
+source "$HOME/.cargo/env"
+# Tauri CLI
+cargo install tauri-cli  # или: npm i -g @tauri-apps/cli
+```
+
+- Arch Linux:
+
+```bash
+# Системные зависимости
+sudo pacman -Sy --needed --noconfirm base-devel curl wget pkgconf openssl gtk3 webkit2gtk libappindicator-gtk3 librsvg
+# Node.js + npm
+sudo pacman -Sy --needed --noconfirm nodejs npm
+# Rustup + cargo (если не установлен)
+sudo pacman -Sy --needed --noconfirm rustup
+rustup default stable
+# Tauri CLI
+cargo install tauri-cli  # или: npm i -g @tauri-apps/cli
+```
+
+Примечания (Linux):
+- На некоторых системах доступна только WebKitGTK 4.0 — это нормально; при наличии 4.1 лучше использовать её.
+- После установки rustup обязательно выполните `source "$HOME/.cargo/env"` в текущей сессии или перезапустите терминал.
+- Если используете Wayland и возникает проблема с индикатором трея, убедитесь, что запущен совместимый апплет трея (например, в KDE/Plasma, GNOME с расширениями и т.д.).
+
 ## Сборка и запуск
 
-> ⚠️ В песочнице, из которой сформирован этот репозиторий, нет доступа к npm и crates.io, поэтому `npm install`, `cargo check` или `cargo tauri dev` не удалось выполнить. Для локальной сборки выполните шаги ниже в собственной среде с доступом в интернет.
+Коротко:
+- Windows (одной командой): `pwsh -File .\scripts\setup.ps1 -Auto -Dev` для запуска в dev-режиме, или `-Auto -Build` для сборки установщика.
+- Linux (одной командой): `bash scripts/setup.sh --auto --dev` для dev, или `--auto --build` для сборки.
+- macOS: установите зависимости согласно документации Tauri, затем из каталога `src-tauri` выполните `cargo tauri dev` или `cargo tauri build`.
 
-1. Установите зависимости Tauri согласно [официальной документации](https://tauri.app/v1/guides/getting-started/prerequisites/).
-2. Установите `@tauri-apps/cli` (глобально или через `devDependencies`).
+После сборки релиза скрипты автоматически копируют артефакты в папку `release` в корне репозитория, чтобы было удобно найти всё, что нужно для распространения.
+
+Пошагово вручную:
+1. Установите зависимости Tauri согласно [официальной документации](https://tauri.app/v1/guides/getting-started/prerequisites/) или используйте скрипт `scripts/setup.ps1` на Windows / `scripts/setup.sh` на Linux.
+2. Установите `@tauri-apps/cli` (глобально через cargo или npm).
 3. В корне проекта запустите:
 
 ```bash
@@ -67,13 +279,29 @@ cd src-tauri
 cargo tauri dev
 ```
 
-Или для сборки:
+Или для сборки релиза:
 
 ```bash
 cargo tauri build
 ```
 
 Фронтенд — статический, дополнительных сборок не требуется (используется `frontend/` как dev/dist каталог).
+
+### Где найти бинарники/установщики после сборки
+После `cargo tauri build`:
+- Скопированные артефакты лежат в папке `release/` в корне проекта (скрипты сохраняют туда EXE/MSI/NSIS на Windows, AppImage/DEB/RPM на Linux, DMG/APP на macOS). 
+- Также оригинальные файлы находятся в стандартных путях Tauri:
+  - Windows:
+    - Портативный бинарник: `src-tauri\target\release\gmail_tray_notifier.exe`
+    - Установщик MSI/NSIS: `src-tauri\target\release\bundle\` (подпапки `msi` или `nsis`)
+  - Linux:
+    - Портативный бинарник: `src-tauri/target/release/gmail_tray_notifier`
+    - Пакеты: `src-tauri/target/release/bundle/` (подпапки `deb`, `appimage`, `rpm` и т.п. — зависит от дистрибутива)
+  - macOS:
+    - Приложение: `src-tauri/target/release/bundle/macos/*.app`
+    - DMG: `src-tauri/target/release/bundle/dmg/*.dmg`
+
+> Примечание: точные имена файлов могут отличаться в зависимости от настроек `package.productName` и системных таргетов.
 
 ## Горячие клавиши и меню трея
 
