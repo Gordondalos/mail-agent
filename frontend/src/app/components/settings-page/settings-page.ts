@@ -99,7 +99,7 @@ export class SettingsPage implements OnInit {
     sound_path: '',
     playback_volume: 0.7,
     auto_launch: true,
-    gmail_query: 'is:unread category:primary',
+    gmail_query: 'in:inbox is:unread',
     oauth_client_id: '',
     oauth_client_secret: ''
   };

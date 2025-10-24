@@ -19,6 +19,7 @@ use tauri::{
     tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager,
 };
+use tauri::WindowEvent;
 use tauri_plugin_autostart::MacosLauncher;
 use tokio::time::sleep;
 use tracing::{debug, error, info, warn};
@@ -301,6 +302,14 @@ fn main() {
         .init();
 
     tauri::Builder::default()
+        // Перехватываем закрытие окна крестиком: прячем вместо уничтожения
+        .on_window_event(|window, event| match event {
+            WindowEvent::CloseRequested { api, .. } => {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+            _ => {}
+        })
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             Some(vec!["--hidden"]),
