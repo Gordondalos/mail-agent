@@ -1,1 +1,19 @@
-{}
+{
+  "name": "gmail-tray-notifier",
+  "version": "1.0.0",
+  "description": "Кроссплатформенное Tauri-приложение, которое висит в системном трее, проверяет непрочитанные письма Gmail и показывает кастомный полупрозрачный алерт 650×150 с кнопками «Перейти» и «Прочитано», а также воспроизводит звук уведомления.",
+  "scripts": {
+    "install:windows": "powershell -File .\\scripts\\setup.ps1 -Auto",
+    "install:macos": "xcode-select --install && brew install node && curl https://sh.rustup.rs -sSf | sh -s -- -y && source \"$HOME/.cargo/env\" && cargo install tauri-cli",
+    "install:linux": "bash scripts/setup.sh --auto",
+    "dev": "cd src-tauri && cargo tauri dev",
+    "build": "cd src-tauri && cargo tauri build"
+  },
+  "keywords": [
+    "tauri",
+    "gmail",
+    "notifier"
+  ],
+  "author": "",
+  "license": "ISC"
+}

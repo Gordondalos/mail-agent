@@ -1,0 +1,4 @@
+windows_wsl_setup_acknowledged = true
+
+[projects.'\\?\C:\project\mail-agent']
+trust_level = "trusted"

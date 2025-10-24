@@ -23,10 +23,10 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            poll_interval_secs: 30,
+            poll_interval_secs: 60,
             sound_enabled: true,
             sound_path: None,
-            auto_launch: false,
+            auto_launch: true,
             gmail_query: "is:unread category:primary".to_string(),
             oauth_client_id: String::new(),
             oauth_client_secret: None,
