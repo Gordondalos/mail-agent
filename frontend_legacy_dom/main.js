@@ -284,11 +284,20 @@ async function initAlert() {
   await appWindow.hide();
   await appWindow.setAlwaysOnTop(true);
 
+  const disableDragRegion = (...elements) => {
+    elements.forEach((element) => {
+      if (element) {
+        element.dataset.tauriDragRegion = 'none';
+      }
+    });
+  };
+
   const shell = document.createElement('div');
   shell.className = 'alert-shell toast-hidden';
 
   const card = document.createElement('div');
   card.className = 'alert-card';
+  card.dataset.tauriDragRegion = 'true';
 
   const content = document.createElement('div');
   content.className = 'alert-content';
@@ -306,18 +315,16 @@ async function initAlert() {
 
   const actions = document.createElement('div');
   actions.className = 'alert-actions';
-
   const openBtn = document.createElement('button');
   openBtn.className = 'open';
   openBtn.textContent = 'Перейти';
-
   const readBtn = document.createElement('button');
   readBtn.className = 'read';
   readBtn.textContent = 'Прочитано';
-
   const dismissBtn = document.createElement('button');
   dismissBtn.className = 'dismiss';
   dismissBtn.textContent = 'Скрыть';
+  disableDragRegion(actions, openBtn, readBtn, dismissBtn);
 
   actions.append(openBtn, readBtn, dismissBtn);
   card.append(content, actions);
