@@ -1,10 +1,11 @@
 import { Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { MatIconModule } from '@angular/material/icon';
-import { Ipc } from '../../services/ipc';
-import { UnlistenFn } from '@tauri-apps/api/event';
-import { convertFileSrc } from '@tauri-apps/api/core';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { CommonModule }                                   from '@angular/common';
+import { MatIconModule }                                  from '@angular/material/icon';
+import { TauriDragWindowDirective }                       from '../tauri-drag-window.directive';
+import { Ipc }                                            from '../../services/ipc';
+import { UnlistenFn }                                     from '@tauri-apps/api/event';
+import { convertFileSrc }                                 from '@tauri-apps/api/core';
+import { getCurrentWindow }                               from '@tauri-apps/api/window';
 
 type NotificationPayload = {
   id: string;
@@ -18,7 +19,7 @@ type NotificationPayload = {
 
 @Component({
   selector: 'app-notification-overlay',
-  imports: [CommonModule, MatIconModule],
+  imports: [CommonModule, MatIconModule, TauriDragWindowDirective, TauriDragWindowDirective],
   templateUrl: './notification-overlay.component.html',
   styleUrls: ['./notification-overlay.component.scss'],
 })
@@ -30,7 +31,8 @@ export class NotificationOverlay implements OnInit, OnDestroy {
   unlistenFns: UnlistenFn[] = [];
   private dateFormatter: Intl.DateTimeFormat | null = null;
 
-  constructor(private readonly ipc: Ipc) {}
+  constructor(private readonly ipc: Ipc) {
+  }
 
   async ngOnInit() {
     const state = await this.ipc.invoke<{ settings: any; authorised: boolean }>('initialise');
@@ -56,12 +58,12 @@ export class NotificationOverlay implements OnInit, OnDestroy {
   async open() {
     const n = this.notification();
     if (!n) return;
-    console.log('notification', n)
+    console.log('notification', n);
     this.notification.set(null);
     this.visible.set(false);
     await this.hideWindow();
     try {
-      await this.ipc.invoke('open_in_browser', { url: n.url });
+      await this.ipc.invoke('open_in_browser', {url: n.url});
     } catch (error) {
       console.error('failed to open in browser', error);
     }
@@ -70,12 +72,12 @@ export class NotificationOverlay implements OnInit, OnDestroy {
   async markRead() {
     const n = this.notification();
     if (!n) return;
-    console.log('notification', n)
+    console.log('notification', n);
     this.notification.set(null);
     this.visible.set(false);
     await this.hideWindow();
     try {
-      await this.ipc.invoke('mark_message_read', { messageId: n.id });
+      await this.ipc.invoke('mark_message_read', {messageId: n.id});
     } catch (error) {
       console.error('failed to mark read', error);
     }
@@ -87,7 +89,7 @@ export class NotificationOverlay implements OnInit, OnDestroy {
     this.visible.set(false);
     await this.hideWindow();
     if (n?.id) {
-      await this.ipc.invoke('dismiss_notification', { messageId: n.id });
+      await this.ipc.invoke('dismiss_notification', {messageId: n.id});
     } else {
       await this.ipc.invoke('dismiss_notification');
     }
@@ -149,7 +151,7 @@ export class NotificationOverlay implements OnInit, OnDestroy {
     }
   }
 
-  formatDate(value: string | null | undefined| any): string {
+  formatDate(value: string | null | undefined | any): string {
     if (!value) {
       return '';
     }
