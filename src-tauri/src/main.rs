@@ -7,6 +7,7 @@ mod oauth;
 
 use std::fs;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -15,6 +16,7 @@ use config::{Settings, SettingsManager, SettingsUpdate};
 use gmail::{wait_for_authorisation, GmailClient, GmailNotification};
 use notifier::NotificationQueue;
 use oauth::{ensure_autostart, AccessTokenProvider, OAuthController, OAuthError};
+use serde::Serialize;
 use serde_json;
 use tauri::WindowEvent;
 use tauri::{
@@ -28,17 +30,24 @@ use tauri_plugin_autostart::MacosLauncher;
 use tokio::time::sleep;
 use tracing::{debug, error, info, warn};
 
+const AUTH_REQUIRED_MESSAGE: &str =
+    "Авторизация в Gmail недоступна. Откройте окно настроек и выполните вход.";
+const AUTH_CONFIG_MESSAGE: &str =
+    "Укажите OAuth Client ID и выполните авторизацию в настройках, чтобы продолжить.";
+
 #[derive(Clone)]
 struct AppState {
     settings: Arc<SettingsManager>,
     oauth: Arc<OAuthController>,
     gmail: Arc<GmailClient>,
     notifier: Arc<NotificationQueue>,
+    auth_prompted: Arc<AtomicBool>,
 }
 
 impl AppState {
     async fn poll_once(&self, app: &AppHandle) -> Result<()> {
         if !self.oauth.is_configured() {
+            self.prompt_auth_once(app, AUTH_CONFIG_MESSAGE);
             return Ok(());
         }
         match self
@@ -47,6 +56,7 @@ impl AppState {
             .await
         {
             Ok(messages) => {
+                self.reset_auth_prompt();
                 for message in messages {
                     if let Ok(json) = serde_json::to_string(&message) {
                         debug!(notification_json = %json, "gmail: notification payload");
@@ -61,7 +71,12 @@ impl AppState {
                     match kind {
                         OAuthError::NotAuthorised => {
                             self.notifier.clear();
+                            self.prompt_auth_once(app, AUTH_REQUIRED_MESSAGE);
                             warn!("gmail polling failed: not authorised");
+                        }
+                        OAuthError::Misconfigured(reason) => {
+                            self.prompt_auth_once(app, reason.as_str());
+                            warn!(%err, "gmail polling failed");
                         }
                         _ => warn!(%err, "gmail polling failed"),
                     }
@@ -75,6 +90,25 @@ impl AppState {
 
     async fn mark_read(&self, id: &str) -> Result<()> {
         self.gmail.mark_read(id).await
+    }
+
+    fn reset_auth_prompt(&self) {
+        self.auth_prompted.store(false, Ordering::SeqCst);
+    }
+
+    fn prompt_auth_once(&self, app: &AppHandle, message: &str) {
+        if self
+            .auth_prompted
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+        {
+            emit_auth_required(app, message);
+        }
+    }
+
+    fn prompt_auth_force(&self, app: &AppHandle, message: &str) {
+        self.auth_prompted.store(true, Ordering::SeqCst);
+        emit_auth_required(app, message);
     }
 }
 
@@ -151,6 +185,25 @@ async fn update_settings(
 
 #[tauri::command]
 async fn check_now(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    if !state.oauth.is_configured() {
+        state.prompt_auth_force(&app, AUTH_CONFIG_MESSAGE);
+        return Ok(());
+    }
+
+    if let Err(err) = state.oauth.access_token().await {
+        match err {
+            OAuthError::NotAuthorised => {
+                state.prompt_auth_force(&app, AUTH_REQUIRED_MESSAGE);
+                return Ok(());
+            }
+            OAuthError::Misconfigured(reason) => {
+                state.prompt_auth_force(&app, reason.as_str());
+                return Ok(());
+            }
+            _ => return Err(err.to_string()),
+        }
+    }
+
     state.poll_once(&app).await.map_err(|err| err.to_string())
 }
 
@@ -439,6 +492,7 @@ fn main() {
                 oauth: oauth.clone(),
                 gmail: gmail.clone(),
                 notifier: notifier.clone(),
+                auth_prompted: Arc::new(AtomicBool::new(false)),
             });
 
             ensure_autostart(&app_handle, settings.get().auto_launch);
@@ -484,4 +538,24 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct AuthPromptPayload {
+    message: String,
+}
+
+fn emit_auth_required(app: &AppHandle, message: &str) {
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.show();
+        let _ = win.set_focus();
+    }
+    if let Err(err) = app.emit(
+        "gmail://auth-required",
+        &AuthPromptPayload {
+            message: message.to_string(),
+        },
+    ) {
+        warn!(%err, "failed to notify auth requirement");
+    }
 }
