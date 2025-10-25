@@ -7,6 +7,22 @@ const params = new URLSearchParams(window.location.search);
 const view = params.get('view');
 let cachedSettings = null;
 
+listen('gmail://auth-required', async (event) => {
+  if (view === 'alert') return;
+  const message =
+    event?.payload?.message ??
+    'Требуется авторизация в Gmail. Откройте окно настроек и выполните вход.';
+  try {
+    await appWindow.show();
+    await appWindow.setFocus();
+  } catch (error) {
+    console.warn('failed to focus settings window', error);
+  }
+  alert(message);
+}).catch((error) => {
+  console.error('failed to subscribe to auth-required event', error);
+});
+
 async function init() {
   if (view === 'alert') {
     document.body.classList.add('alert');
