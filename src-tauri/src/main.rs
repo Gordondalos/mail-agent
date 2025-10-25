@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use config::{Settings, SettingsManager, SettingsUpdate};
-use gmail::{wait_for_authorisation, GmailClient};
+use gmail::{wait_for_authorisation, GmailClient, GmailNotification};
 use notifier::NotificationQueue;
 use oauth::{ensure_autostart, AccessTokenProvider, OAuthController, OAuthError};
 use tauri::{
@@ -190,6 +190,13 @@ async fn dismiss_notification(
         .map_err(|err| err.to_string())
 }
 
+#[tauri::command]
+async fn current_notification(
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<GmailNotification>, String> {
+    Ok(state.notifier.current())
+}
+
 fn register_tray(app: &tauri::App) -> tauri::Result<()> {
     let check_now = MenuItem::with_id(app, "check_now", "Проверить сейчас", true, None::<&str>)?;
     let open_settings = MenuItem::with_id(app, "open_settings", "Открыть настройки", true, None::<&str>)?;
@@ -367,7 +374,8 @@ fn main() {
             check_now,
             mark_message_read,
             open_in_browser,
-            dismiss_notification
+            dismiss_notification,
+            current_notification
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
