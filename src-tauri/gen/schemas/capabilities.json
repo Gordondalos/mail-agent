@@ -1,1 +1,1 @@
-{}
+{"app":{"identifier":"app","description":"Базовые права для окон приложения и перетаскивания всплывашки.","local":true,"windows":["*"],"permissions":["core:default","core:window:allow-start-dragging"]}}

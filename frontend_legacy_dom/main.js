@@ -330,14 +330,16 @@ async function initAlert() {
     clearTimeout(autoHideTimer);
     shell.classList.add('toast-hidden');
     await appWindow.hide();
-    currentNotification = null;
     if (!notifyBackend) {
+      currentNotification = null;
       return;
     }
     try {
-      await invoke('dismiss_notification');
+      await invoke('dismiss_notification', { messageId: currentNotification?.id });
     } catch (error) {
       console.warn('dismiss failed', error);
+    } finally {
+      currentNotification = null;
     }
   };
 
@@ -366,6 +368,7 @@ async function initAlert() {
   dismissBtn.addEventListener('click', () => hideToast(true));
 
   const renderNotification = async (notification) => {
+    console.debug('[gmail notification]', JSON.stringify(notification, null, 2));
     currentNotification = notification;
     title.textContent = notification.subject;
     meta.textContent = notification.sender ?? 'Gmail';

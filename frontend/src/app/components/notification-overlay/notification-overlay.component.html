@@ -1,0 +1,26 @@
+<div
+  class="alert-shell"
+  data-tauri-drag-region
+  *ngIf="current() as n"
+>
+  <div class="alert-card">
+    <button
+      class="alert-close"
+      type="button"
+      aria-label="Закрыть уведомление"
+      (click)="dismiss()"
+      data-tauri-drag-region="false"
+    >
+      <mat-icon>close</mat-icon>
+    </button>
+    <div class="alert-content" data-tauri-drag-region="false">
+      <div class="alert-title">{{ n.subject || '(без темы)' }}</div>
+      <div class="alert-meta">{{ n.sender || 'Gmail' }}</div>
+      <div class="alert-snippet">{{ n.snippet || '' }}</div>
+    </div>
+    <div class="alert-actions" data-tauri-drag-region="false">
+      <button class="open" (click)="open()">Перейти</button>
+      <button class="read" (click)="markRead()">Прочитано</button>
+    </div>
+  </div>
+</div>
