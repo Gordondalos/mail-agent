@@ -387,13 +387,36 @@ async function initAlert() {
       return;
     }
     try {
-      const src = await convertFileSrc(cachedSettings.sound_path);
+      const src = await resolveSoundSource(cachedSettings.sound_path);
+      if (!src) {
+        return;
+      }
       const audio = new Audio(src);
       audio.volume = cachedSettings.playback_volume ?? 0.7;
       await audio.play();
     } catch (error) {
       console.warn('failed to play sound', error);
     }
+  };
+
+  const resolveSoundSource = async (path) => {
+    if (!path) return null;
+    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) {
+      return path;
+    }
+    if (isAbsolutePath(path)) {
+      return convertFileSrc(path);
+    }
+    return normalizeRelativePath(path);
+  };
+
+  const isAbsolutePath = (path) => {
+    return /^[a-zA-Z]:\\/.test(path) || path.startsWith('\\\\') || path.startsWith('/') || path.startsWith('file:');
+  };
+
+  const normalizeRelativePath = (path) => {
+    const sanitized = path.replace(/^[/\\]+/, '').replace(/\\/g, '/');
+    return `/${sanitized}`;
   };
 
   listen('gmail://notification', async (event) => {

@@ -42,18 +42,18 @@ impl NotificationQueue {
         self.inner.lock().current.clone()
     }
 
-pub fn complete_current(&self, app: &AppHandle) -> Result<()> {
-    let mut state = self.inner.lock();
-    state.current = None;
-    if let Some(next) = state.pending.pop_front() {
-        state.current = Some(next.clone());
-        drop(state);
-        emit_notification(app, next)?;
-    } else if let Some(win) = app.get_webview_window("alert") {
-        let _ = win.hide();
+    pub fn complete_current(&self, app: &AppHandle) -> Result<()> {
+        let mut state = self.inner.lock();
+        state.current = None;
+        if let Some(next) = state.pending.pop_front() {
+            state.current = Some(next.clone());
+            drop(state);
+            emit_notification(app, next)?;
+        } else if let Some(win) = app.get_webview_window("alert") {
+            let _ = win.hide();
+        }
+        Ok(())
     }
-    Ok(())
-}
 
     pub fn clear(&self) {
         let mut state = self.inner.lock();
@@ -91,7 +91,10 @@ fn place_alert_window(win: &WebviewWindow) {
     let x = monitor_pos.x + monitor_size.width as i32 - width - ALERT_MARGIN;
     let y = monitor_pos.y + monitor_size.height as i32 - height - ALERT_MARGIN;
 
-    let _ = win.set_position(PhysicalPosition::new(x.max(monitor_pos.x), y.max(monitor_pos.y)));
+    let _ = win.set_position(PhysicalPosition::new(
+        x.max(monitor_pos.x),
+        y.max(monitor_pos.y),
+    ));
 }
 
 #[derive(Debug, Clone, Serialize)]

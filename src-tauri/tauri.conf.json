@@ -32,7 +32,10 @@
         "skipTaskbar": true,
         "url": "/?view=alert"
       }
-    ]
+    ],
+    "security": {
+      "capabilities": ["app"]
+    }
   },
   "bundle": {
     "active": true,

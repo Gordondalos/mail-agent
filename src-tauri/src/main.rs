@@ -5,6 +5,8 @@ mod gmail;
 mod notifier;
 mod oauth;
 
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -14,13 +16,14 @@ use gmail::{wait_for_authorisation, GmailClient, GmailNotification};
 use notifier::NotificationQueue;
 use oauth::{ensure_autostart, AccessTokenProvider, OAuthController, OAuthError};
 use serde_json;
+use tauri::WindowEvent;
 use tauri::{
     image::Image,
     menu::{MenuBuilder, MenuItem},
+    path::BaseDirectory,
     tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager,
 };
-use tauri::WindowEvent;
 use tauri_plugin_autostart::MacosLauncher;
 use tokio::time::sleep;
 use tracing::{debug, error, info, warn};
@@ -184,6 +187,52 @@ async fn open_in_browser(
         .map(|_| ())
 }
 
+#[derive(serde::Serialize)]
+struct VoicePreset {
+    id: String,
+    label: String,
+    file_name: String,
+    path: String,
+}
+
+#[tauri::command]
+async fn list_voice_tracks(app: AppHandle) -> Result<Vec<VoicePreset>, String> {
+    let voice_dir = resolve_voice_dir(&app).map_err(|err| err.to_string())?;
+    let mut presets = Vec::new();
+    let entries = fs::read_dir(&voice_dir).map_err(|err| err.to_string())?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(ext) = path.extension().and_then(|ext| ext.to_str()) else {
+            continue;
+        };
+        let ext = ext.to_ascii_lowercase();
+        if !matches!(ext.as_str(), "mp3" | "wav" | "ogg" | "m4a") {
+            continue;
+        }
+        let file_name = match path.file_name().and_then(|name| name.to_str()) {
+            Some(name) => name.to_string(),
+            None => continue,
+        };
+        let label = format_voice_label(
+            path.file_stem()
+                .and_then(|stem| stem.to_str())
+                .unwrap_or(&file_name),
+        );
+        let relative_path = format!("voice/{}", file_name.replace('\\', "/"));
+        presets.push(VoicePreset {
+            id: format!("voice-{}", file_name),
+            label,
+            file_name,
+            path: relative_path,
+        });
+    }
+    presets.sort_by(|a, b| a.label.to_lowercase().cmp(&b.label.to_lowercase()));
+    Ok(presets)
+}
+
 #[tauri::command]
 async fn dismiss_notification(
     app: AppHandle,
@@ -199,6 +248,43 @@ async fn dismiss_notification(
         .map_err(|err| err.to_string())
 }
 
+fn resolve_voice_dir(app: &AppHandle) -> Result<PathBuf> {
+    const DEV_VOICE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../frontend/public/voice");
+    if let Ok(path) = app.path().resolve("voice", BaseDirectory::Resource) {
+        if path.exists() {
+            return Ok(path);
+        }
+    }
+    let dev = PathBuf::from(DEV_VOICE_DIR);
+    if dev.exists() {
+        return Ok(dev);
+    }
+    anyhow::bail!("voice assets directory is missing");
+}
+
+fn format_voice_label(stem: &str) -> String {
+    let cleaned = stem.replace(['_', '-'], " ");
+    let trimmed = cleaned.trim();
+    if trimmed.is_empty() {
+        return "Встроенный звук".to_string();
+    }
+    trimmed
+        .split_whitespace()
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                Some(first) => {
+                    let mut capitalised = first.to_uppercase().collect::<String>();
+                    capitalised.push_str(chars.as_str());
+                    capitalised
+                }
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 #[tauri::command]
 async fn current_notification(
     state: tauri::State<'_, AppState>,
@@ -208,7 +294,13 @@ async fn current_notification(
 
 fn register_tray(app: &tauri::App) -> tauri::Result<()> {
     let check_now = MenuItem::with_id(app, "check_now", "Проверить сейчас", true, None::<&str>)?;
-    let open_settings = MenuItem::with_id(app, "open_settings", "Открыть настройки", true, None::<&str>)?;
+    let open_settings = MenuItem::with_id(
+        app,
+        "open_settings",
+        "Открыть настройки",
+        true,
+        None::<&str>,
+    )?;
     let auth = MenuItem::with_id(app, "auth", "Войти в Gmail", true, None::<&str>)?;
     let logout = MenuItem::with_id(app, "logout", "Выйти", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Выйти из приложения", true, None::<&str>)?;
@@ -223,8 +315,11 @@ fn register_tray(app: &tauri::App) -> tauri::Result<()> {
         .item(&quit)
         .build()?;
 
-    let tray_icon = Image::from_path("icons/icon.ico")
-        .unwrap_or_else(|_| app.default_window_icon().cloned().expect("missing default icon"));
+    let tray_icon = Image::from_path("icons/icon.ico").unwrap_or_else(|_| {
+        app.default_window_icon()
+            .cloned()
+            .expect("missing default icon")
+    });
 
     TrayIconBuilder::new()
         .icon(tray_icon)
@@ -300,7 +395,8 @@ fn register_tray(app: &tauri::App) -> tauri::Result<()> {
 fn main() {
     // Avoid broken system proxy settings interfering with OAuth HTTPS calls
     // If NO_PROXY isn't set, exclude Google OAuth hosts and localhost from proxying
-    let no_proxy_is_set = std::env::var_os("NO_PROXY").is_some() || std::env::var_os("no_proxy").is_some();
+    let no_proxy_is_set =
+        std::env::var_os("NO_PROXY").is_some() || std::env::var_os("no_proxy").is_some();
     if !no_proxy_is_set {
         std::env::set_var(
             "NO_PROXY",
@@ -308,10 +404,9 @@ fn main() {
         );
     }
 
-    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(
-            "gmail_tray_notifier=debug,reqwest=debug,hyper=debug",
-        ));
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        tracing_subscriber::EnvFilter::new("gmail_tray_notifier=debug,reqwest=debug,hyper=debug")
+    });
     tracing_subscriber::fmt()
         .with_env_filter(env_filter)
         .with_target(false)
@@ -384,7 +479,8 @@ fn main() {
             mark_message_read,
             open_in_browser,
             dismiss_notification,
-            current_notification
+            current_notification,
+            list_voice_tracks
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
