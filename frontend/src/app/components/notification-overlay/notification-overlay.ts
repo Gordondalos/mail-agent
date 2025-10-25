@@ -55,24 +55,26 @@ export class NotificationOverlay implements OnInit, OnDestroy {
   async open() {
     const n = this.notification();
     if (!n) return;
+    this.notification.set(null);
+    this.visible.set(false);
+    await this.hideWindow();
     try {
-      await this.ipc.invoke('open_in_browser', {url: n.url});
-    } finally {
-      this.notification.set(null);
-      this.visible.set(false);
-      await this.hideWindow();
+      await this.ipc.invoke('open_in_browser', { url: n.url });
+    } catch (error) {
+      console.error('failed to open in browser', error);
     }
   }
 
   async markRead() {
     const n = this.notification();
     if (!n) return;
+    this.notification.set(null);
+    this.visible.set(false);
+    await this.hideWindow();
     try {
-      await this.ipc.invoke('mark_message_read', {messageId: n.id});
-    } finally {
-      this.notification.set(null);
-      this.visible.set(false);
-      await this.hideWindow();
+      await this.ipc.invoke('mark_message_read', { messageId: n.id });
+    } catch (error) {
+      console.error('failed to mark read', error);
     }
   }
 

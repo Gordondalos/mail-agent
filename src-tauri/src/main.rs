@@ -162,6 +162,7 @@ async fn mark_message_read(
         .mark_read(&message_id)
         .await
         .map_err(|err| err.to_string())?;
+    state.gmail.forget(&message_id);
     notifier
         .complete_current(&app)
         .map_err(|err| err.to_string())?;

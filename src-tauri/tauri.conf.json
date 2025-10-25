@@ -35,6 +35,10 @@
       }
     ]
   },
+  "security": {
+    "capabilities": ["app"],
+    "dangerousRemoteDomainIpcAccess": []
+  },
   "bundle": {
     "active": true,
     "targets": "all",
