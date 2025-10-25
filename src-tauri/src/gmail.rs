@@ -230,8 +230,8 @@ impl Message {
             .and_then(|h| DateTime::parse_from_rfc2822(&h.value).ok())
             .map(|dt| dt.with_timezone(&Utc));
         let url = format!(
-            "https://mail.google.com/mail/u/0/#inbox/{thread}",
-            thread = self.thread_id
+            "https://mail.google.com/mail/u/0/#inbox/{message}",
+            message = self.id
         );
         GmailNotification {
             id: self.id,
