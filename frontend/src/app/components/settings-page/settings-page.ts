@@ -1,16 +1,17 @@
 import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Settings } from '../../services/settings';
+import { Settings, VoicePreset } from '../../services/settings';
 import { Ipc } from '../../services/ipc';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatButtonModule } from '@angular/material/button';
+import { MatSelectModule, MatSelectChange } from '@angular/material/select';
 
 @Component({
   selector: 'app-settings-page',
-  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatCheckboxModule, MatButtonModule],
+  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatCheckboxModule, MatButtonModule, MatSelectModule],
   template: `
     <div class="container">
       <h1>Gmail Tray Notifier</h1>
@@ -33,12 +34,39 @@ import { MatButtonModule } from '@angular/material/button';
           <input matInput type="number" min="15" max="300" [(ngModel)]="model.poll_interval_secs" name="interval" />
         </mat-form-field>
 
-        <div class="row">
+        <div class="row sound-row">
           <mat-checkbox [(ngModel)]="model.sound_enabled" name="soundEnabled">Звук уведомления</mat-checkbox>
-          <mat-form-field appearance="outline" class="flex1">
-            <mat-label>Путь к файлу (mp3/wav)</mat-label>
-            <input matInput type="text" [(ngModel)]="model.sound_path" name="soundPath" />
-          </mat-form-field>
+          <div class="sound-inputs">
+            <mat-form-field appearance="outline" class="flex1">
+              <mat-label>Путь к файлу (mp3/wav)</mat-label>
+              <input
+                matInput
+                type="text"
+                [(ngModel)]="model.sound_path"
+                name="soundPath"
+                (ngModelChange)="onSoundPathInput($event)"
+              />
+            </mat-form-field>
+            <mat-form-field
+              appearance="outline"
+              class="voice-select"
+              *ngIf="voicePresets().length > 0"
+            >
+              <mat-label>Встроенная мелодия</mat-label>
+              <mat-select
+                [value]="selectedVoicePreset()"
+                (selectionChange)="onVoicePresetSelected($event)"
+              >
+                <mat-option [value]="null">Не выбрано</mat-option>
+                <mat-option
+                  *ngFor="let preset of voicePresets()"
+                  [value]="preset.id"
+                >
+                  {{ preset.label }}
+                </mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
         </div>
 
         <mat-form-field appearance="outline">
@@ -85,7 +113,10 @@ import { MatButtonModule } from '@angular/material/button';
     form.settings { display:grid; gap:12px; }
     .field { display:flex; flex-direction:column; gap:6px; }
     .row { display:flex; align-items:center; gap:16px; }
+    .row.sound-row { align-items:flex-start; }
+    .sound-inputs { display:flex; gap:12px; flex:1 1 auto; }
     .flex1 { flex: 1 1 auto; }
+    .voice-select { min-width: 220px; }
     textarea { min-height: 70px; }
     .notice { margin-top: 14px; padding: 10px 12px; border-radius: 10px; background: rgba(37,99,235,.12); }
   `,
@@ -93,6 +124,8 @@ import { MatButtonModule } from '@angular/material/button';
 export class SettingsPage implements OnInit {
   authorised = signal<boolean>(false);
   busy = signal<boolean>(false);
+  voicePresets = signal<VoicePreset[]>([]);
+  selectedVoicePreset = signal<string | null>(null);
   model: any = {
     poll_interval_secs: 60,
     sound_enabled: true,
@@ -110,6 +143,8 @@ export class SettingsPage implements OnInit {
     const state = await this.settingsSvc.initialise();
     this.authorised.set(state.authorised);
     this.model = { ...this.model, ...state.settings };
+    await this.loadVoicePresets();
+    this.syncVoicePresetSelection();
   }
 
   async connect() {
@@ -164,10 +199,47 @@ export class SettingsPage implements OnInit {
       };
       const saved = await this.settingsSvc.update(update);
       this.model = { ...this.model, ...saved };
+      this.syncVoicePresetSelection();
     } catch (e) {
       alert('Не удалось сохранить: ' + e);
     } finally {
       this.busy.set(false);
     }
+  }
+
+  async loadVoicePresets() {
+    try {
+      const presets = await this.settingsSvc.voicePresets();
+      this.voicePresets.set(presets);
+    } catch (e) {
+      console.warn('Не удалось загрузить встроенные мелодии', e);
+      this.voicePresets.set([]);
+    }
+    this.syncVoicePresetSelection();
+  }
+
+  onSoundPathInput(_: string) {
+    this.syncVoicePresetSelection();
+  }
+
+  onVoicePresetSelected(event: MatSelectChange) {
+    const selectedId: string | null = event.value ?? null;
+    if (!selectedId) {
+      this.selectedVoicePreset.set(null);
+      this.model.sound_path = '';
+      return;
+    }
+    const preset = this.voicePresets().find((p) => p.id === selectedId);
+    if (!preset) {
+      return;
+    }
+    this.model.sound_path = preset.path;
+    this.selectedVoicePreset.set(preset.id);
+  }
+
+  private syncVoicePresetSelection() {
+    const current = this.model.sound_path || '';
+    const preset = this.voicePresets().find((p) => p.path === current);
+    this.selectedVoicePreset.set(preset ? preset.id : null);
   }
 }

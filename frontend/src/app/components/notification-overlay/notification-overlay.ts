@@ -12,7 +12,7 @@ type NotificationPayload = {
   subject: string;
   snippet?: string | null;
   sender?: string | null;
-  received_at?: string | null;
+  receivedAt?: string | null;
   url: string;
 };
 
@@ -28,6 +28,7 @@ export class NotificationOverlay implements OnInit, OnDestroy {
   current = computed(() => (this.visible() ? this.notification() : null));
   settings: any | null = null;
   unlistenFns: UnlistenFn[] = [];
+  private dateFormatter: Intl.DateTimeFormat | null = null;
 
   constructor(private readonly ipc: Ipc) {}
 
@@ -55,6 +56,7 @@ export class NotificationOverlay implements OnInit, OnDestroy {
   async open() {
     const n = this.notification();
     if (!n) return;
+    console.log('notification', n)
     this.notification.set(null);
     this.visible.set(false);
     await this.hideWindow();
@@ -68,6 +70,7 @@ export class NotificationOverlay implements OnInit, OnDestroy {
   async markRead() {
     const n = this.notification();
     if (!n) return;
+    console.log('notification', n)
     this.notification.set(null);
     this.visible.set(false);
     await this.hideWindow();
@@ -106,7 +109,10 @@ export class NotificationOverlay implements OnInit, OnDestroy {
   private async playSound() {
     if (!this.settings?.sound_enabled || !this.settings?.sound_path) return;
     try {
-      const src = await convertFileSrc(this.settings.sound_path);
+      const src = await this.resolveSoundSource(this.settings.sound_path);
+      if (!src) {
+        return;
+      }
       const audio = new Audio(src);
       audio.volume = this.settings.playback_volume ?? 0.7;
       await audio.play();
@@ -115,11 +121,48 @@ export class NotificationOverlay implements OnInit, OnDestroy {
     }
   }
 
+  private async resolveSoundSource(path: string): Promise<string | null> {
+    if (!path) return null;
+    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) {
+      return path;
+    }
+    if (this.isAbsolutePath(path)) {
+      return convertFileSrc(path);
+    }
+    return this.normalizeRelativePath(path);
+  }
+
+  private isAbsolutePath(path: string): boolean {
+    return /^[a-zA-Z]:\\/.test(path) || path.startsWith('\\\\') || path.startsWith('/') || path.startsWith('file:');
+  }
+
+  private normalizeRelativePath(path: string): string {
+    const sanitized = path.replace(/^[/\\]+/, '').replace(/\\/g, '/');
+    return `/${sanitized}`;
+  }
+
   private async hideWindow() {
     try {
       await getCurrentWindow().hide();
     } catch {
       // ignore
+    }
+  }
+
+  formatDate(value: string | null | undefined| any): string {
+    if (!value) {
+      return '';
+    }
+    if (!this.dateFormatter) {
+      this.dateFormatter = new Intl.DateTimeFormat(undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      });
+    }
+    try {
+      return this.dateFormatter.format(new Date(value));
+    } catch {
+      return value;
     }
   }
 }

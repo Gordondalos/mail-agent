@@ -14,7 +14,14 @@
       <mat-icon>close</mat-icon>
     </button>
     <div class="alert-content" data-tauri-drag-region="false">
-      <div class="alert-title">{{ n.subject || '(без темы)' }}</div>
+
+      <div class="alert-title">
+        {{ n.subject || '(без темы)' }}
+        <span class="alert-date" *ngIf="n.receivedAt as received">
+          ({{ formatDate(received) }})
+        </span>
+
+      </div>
       <div class="alert-meta">{{ n.sender || 'Gmail' }}</div>
       <div class="alert-snippet">{{ n.snippet || '' }}</div>
     </div>

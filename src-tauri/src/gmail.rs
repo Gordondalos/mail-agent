@@ -285,7 +285,10 @@ mod tests {
 
         let notification = message.into_notification();
         assert_eq!(notification.subject, "Test subject");
-        assert_eq!(notification.sender.as_deref(), Some("Sender <sender@example.com>"));
+        assert_eq!(
+            notification.sender.as_deref(),
+            Some("Sender <sender@example.com>")
+        );
         assert_eq!(notification.thread_id, "thread-1");
         assert!(notification.received_at.is_some(), "date header converted");
     }
