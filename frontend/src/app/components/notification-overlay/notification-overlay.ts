@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { Ipc } from '../../services/ipc';
 import { UnlistenFn } from '@tauri-apps/api/event';
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 type NotificationPayload = {
   id: string;
@@ -109,6 +110,7 @@ export class NotificationOverlay implements OnInit, OnDestroy {
       await this.ipc.invoke('open_in_browser', { url: n.url });
     } finally {
       this.visible.set(false);
+      await this.hideWindow();
     }
   }
 
@@ -119,12 +121,14 @@ export class NotificationOverlay implements OnInit, OnDestroy {
       await this.ipc.invoke('mark_message_read', { messageId: n.id });
     } finally {
       this.visible.set(false);
+      await this.hideWindow();
     }
   }
 
   async dismiss() {
-    await this.ipc.invoke('dismiss_notification');
     this.visible.set(false);
+    await this.hideWindow();
+    await this.ipc.invoke('dismiss_notification');
   }
 
   private async restoreCurrent() {
@@ -148,6 +152,14 @@ export class NotificationOverlay implements OnInit, OnDestroy {
       await audio.play();
     } catch (e) {
       // noop
+    }
+  }
+
+  private async hideWindow() {
+    try {
+      await getCurrentWindow().hide();
+    } catch {
+      // ignore
     }
   }
 }
