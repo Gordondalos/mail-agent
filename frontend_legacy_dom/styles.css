@@ -145,6 +145,18 @@ button:disabled {
   gap: 12px;
   backdrop-filter: blur(18px);
   border: 1px solid rgba(148, 163, 184, 0.25);
+  -webkit-app-region: drag;
+  cursor: grab;
+}
+
+.alert-card:active {
+  cursor: grabbing;
+}
+
+.alert-actions,
+.alert-actions button {
+  -webkit-app-region: no-drag;
+  cursor: pointer;
 }
 
 .alert-content {
