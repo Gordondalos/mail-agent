@@ -13,6 +13,7 @@ use config::{Settings, SettingsManager, SettingsUpdate};
 use gmail::{wait_for_authorisation, GmailClient, GmailNotification};
 use notifier::NotificationQueue;
 use oauth::{ensure_autostart, AccessTokenProvider, OAuthController, OAuthError};
+use serde_json;
 use tauri::{
     image::Image,
     menu::{MenuBuilder, MenuItem},
@@ -44,6 +45,9 @@ impl AppState {
         {
             Ok(messages) => {
                 for message in messages {
+                    if let Ok(json) = serde_json::to_string(&message) {
+                        debug!(notification_json = %json, "gmail: notification payload");
+                    }
                     if let Err(err) = self.notifier.enqueue(app, message) {
                         warn!(%err, "failed to enqueue notification");
                     }
@@ -183,7 +187,11 @@ async fn open_in_browser(
 async fn dismiss_notification(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
+    message_id: Option<String>,
 ) -> Result<(), String> {
+    if let Some(id) = message_id {
+        state.gmail.forget(&id);
+    }
     state
         .notifier
         .complete_current(&app)
