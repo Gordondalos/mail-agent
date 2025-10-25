@@ -96,3 +96,15 @@
 .alert-close:hover {
   color: #fff;
 }
+
+
+/* область, за которую тащим окно */
+[data-tauri-drag-region] {
+  -webkit-app-region: drag;
+  cursor: move;
+}
+
+/* элементы внутри, которые должны оставаться кликабельными */
+.no-drag {
+  -webkit-app-region: no-drag;
+}
