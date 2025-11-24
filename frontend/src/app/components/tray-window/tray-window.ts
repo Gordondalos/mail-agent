@@ -3,12 +3,8 @@ import { Component } from '@angular/core';
 @Component({
   selector: 'app-tray-window',
   imports: [],
-  template: `
-    <p>
-      tray-window works!
-    </p>
-  `,
-  styles: ``,
+  templateUrl: './tray-window.component.html',
+  styleUrls: ['./tray-window.component.css']
 })
 export class TrayWindow {
 

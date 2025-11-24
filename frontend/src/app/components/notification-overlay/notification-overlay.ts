@@ -1,11 +1,11 @@
 import { Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
-import { CommonModule }                                   from '@angular/common';
-import { MatIconModule }                                  from '@angular/material/icon';
-import { TauriDragWindowDirective }                       from '../tauri-drag-window.directive';
-import { Ipc }                                            from '../../services/ipc';
-import { UnlistenFn }                                     from '@tauri-apps/api/event';
-import { convertFileSrc }                                 from '@tauri-apps/api/core';
-import { getCurrentWindow }                               from '@tauri-apps/api/window';
+import { CommonModule } from '@angular/common';
+import { MatIconModule } from '@angular/material/icon';
+import { TauriDragWindowDirective } from '../tauri-drag-window.directive';
+import { Ipc } from '../../services/ipc';
+import { UnlistenFn } from '@tauri-apps/api/event';
+import { convertFileSrc } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 type NotificationPayload = {
   id: string;
@@ -63,7 +63,7 @@ export class NotificationOverlay implements OnInit, OnDestroy {
     this.visible.set(false);
     await this.hideWindow();
     try {
-      await this.ipc.invoke('open_in_browser', {url: n.url});
+      await this.ipc.invoke('open_in_browser', { url: n.url });
     } catch (error) {
       console.error('failed to open in browser', error);
     }
@@ -77,7 +77,7 @@ export class NotificationOverlay implements OnInit, OnDestroy {
     this.visible.set(false);
     await this.hideWindow();
     try {
-      await this.ipc.invoke('mark_message_read', {messageId: n.id});
+      await this.ipc.invoke('mark_message_read', { messageId: n.id });
     } catch (error) {
       console.error('failed to mark read', error);
     }
@@ -89,9 +89,21 @@ export class NotificationOverlay implements OnInit, OnDestroy {
     this.visible.set(false);
     await this.hideWindow();
     if (n?.id) {
-      await this.ipc.invoke('dismiss_notification', {messageId: n.id});
+      await this.ipc.invoke('dismiss_notification', { messageId: n.id });
     } else {
       await this.ipc.invoke('dismiss_notification');
+    }
+  }
+
+  async snooze() {
+    const n = this.notification();
+    this.notification.set(null);
+    this.visible.set(false);
+    await this.hideWindow();
+    try {
+      await this.ipc.invoke('snooze');
+    } catch (error) {
+      console.error('failed to snooze', error);
     }
   }
 

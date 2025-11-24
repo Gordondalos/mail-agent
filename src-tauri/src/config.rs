@@ -18,6 +18,7 @@ pub struct Settings {
     pub oauth_client_id: String,
     pub oauth_client_secret: Option<String>,
     pub playback_volume: f32,
+    pub snooze_duration_mins: u64,
 }
 
 impl Default for Settings {
@@ -31,6 +32,7 @@ impl Default for Settings {
             oauth_client_id: String::new(),
             oauth_client_secret: None,
             playback_volume: 0.7,
+            snooze_duration_mins: 20,
         }
     }
 }
@@ -45,6 +47,7 @@ pub struct SettingsUpdate {
     pub oauth_client_id: Option<String>,
     pub oauth_client_secret: Option<Option<String>>,
     pub playback_volume: Option<f32>,
+    pub snooze_duration_mins: Option<u64>,
 }
 
 pub struct SettingsManager {
@@ -91,6 +94,9 @@ impl SettingsManager {
         }
         if let Some(value) = update.playback_volume {
             guard.playback_volume = value.clamp(0.0, 1.0);
+        }
+        if let Some(value) = update.snooze_duration_mins {
+            guard.snooze_duration_mins = value.clamp(1, 1440);
         }
         save_settings(&self.path, &guard)?;
         Ok(guard.clone())

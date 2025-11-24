@@ -1,0 +1,82 @@
+<div class="container">
+    <h1>Gmail Tray Notifier</h1>
+
+    <div class="status" [class.unauthorised]="!authorised()">
+        {{ authorised() ? 'Авторизация выполнена' : 'Требуется вход' }}
+    </div>
+
+    <div class="actions">
+        <button mat-flat-button color="primary" (click)="connect()" [disabled]="busy()">
+            {{ authorised() ? 'Повторная авторизация' : 'Войти в Gmail' }}
+        </button>
+        <button mat-stroked-button (click)="logout()" [disabled]="busy()">Выйти</button>
+        <button mat-stroked-button (click)="checkNow()" [disabled]="busy()">Проверить сейчас</button>
+    </div>
+
+    <form class="settings" (ngSubmit)="save()">
+        <mat-form-field appearance="outline">
+            <mat-label>Интервал проверки (сек.)</mat-label>
+            <input matInput type="number" min="15" max="300" [(ngModel)]="model.poll_interval_secs" name="interval" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+            <mat-label>Длительность откладывания (мин.)</mat-label>
+            <input matInput type="number" min="1" max="1440" [(ngModel)]="model.snooze_duration_mins"
+                name="snoozeDuration" />
+        </mat-form-field>
+
+        <div class="row sound-row">
+            <mat-checkbox [(ngModel)]="model.sound_enabled" name="soundEnabled">Звук уведомления</mat-checkbox>
+            <div class="sound-inputs">
+                <mat-form-field appearance="outline" class="flex1">
+                    <mat-label>Путь к файлу (mp3/wav)</mat-label>
+                    <input matInput type="text" [(ngModel)]="model.sound_path" name="soundPath"
+                        (ngModelChange)="onSoundPathInput($event)" />
+                </mat-form-field>
+                <mat-form-field appearance="outline" class="voice-select" *ngIf="voicePresets().length > 0">
+                    <mat-label>Встроенная мелодия</mat-label>
+                    <mat-select [value]="selectedVoicePreset()" (selectionChange)="onVoicePresetSelected($event)">
+                        <mat-option [value]="null">Не выбрано</mat-option>
+                        <mat-option *ngFor="let preset of voicePresets()" [value]="preset.id">
+                            {{ preset.label }}
+                        </mat-option>
+                    </mat-select>
+                </mat-form-field>
+            </div>
+        </div>
+
+        <mat-form-field appearance="outline">
+            <mat-label>Громкость (0-1)</mat-label>
+            <input matInput type="number" step="0.05" min="0" max="1" [(ngModel)]="model.playback_volume"
+                name="volume" />
+        </mat-form-field>
+
+        <div class="row">
+            <mat-checkbox [(ngModel)]="model.auto_launch" name="autoLaunch">Запускать при входе в систему</mat-checkbox>
+        </div>
+
+        <mat-form-field appearance="outline">
+            <mat-label>Поисковый запрос Gmail</mat-label>
+            <textarea matInput [(ngModel)]="model.gmail_query" name="gmailQuery"></textarea>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+            <mat-label>OAuth Client ID</mat-label>
+            <input matInput type="text" [(ngModel)]="model.oauth_client_id" name="clientId" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+            <mat-label>OAuth Client Secret (опционально)</mat-label>
+            <input matInput type="text" [(ngModel)]="model.oauth_client_secret" name="clientSecret" />
+        </mat-form-field>
+
+        <div class="actions">
+            <button mat-flat-button color="primary" type="submit" [disabled]="busy()">Сохранить настройки</button>
+        </div>
+    </form>
+
+    <div class="notice">
+        OAuth2-клиент (Desktop app) создаётся в Google Cloud Console. <br />
+        Укажите Client ID и секрет ниже. Токены автоматически сохраняются в системном хранилище.
+    </div>
+</div>

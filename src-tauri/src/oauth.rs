@@ -154,7 +154,13 @@ impl OAuthController {
                 .request_async(async_http_client)
                 .await
                 .map_err(|err| OAuthError::Other(err.into()))?;
-            let new_token = TokenSet::from_response(&response)?;
+            let mut new_token = TokenSet::from_response(&response)?;
+            
+            // If the new token doesn't have a refresh token, preserve the old one
+            if new_token.refresh_token.is_none() {
+                new_token.refresh_token = Some(refresh);
+            }
+
             self.storage.store(&new_token)?;
             let mut cache = self.cache.lock();
             *cache = Some(new_token.clone());

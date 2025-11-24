@@ -42,6 +42,7 @@ struct AppState {
     gmail: Arc<GmailClient>,
     notifier: Arc<NotificationQueue>,
     auth_prompted: Arc<AtomicBool>,
+    snooze_until: Arc<Mutex<Option<std::time::Instant>>>,
 }
 
 impl AppState {
@@ -50,6 +51,16 @@ impl AppState {
             self.prompt_auth_once(app, AUTH_CONFIG_MESSAGE);
             return Ok(());
         }
+
+        if let Some(until) = *self.snooze_until.lock() {
+            if std::time::Instant::now() < until {
+                debug!("gmail polling snoozed");
+                return Ok(());
+            } else {
+                *self.snooze_until.lock() = None;
+            }
+        }
+
         match self
             .gmail
             .fetch_unread(&self.settings.get().gmail_query)
@@ -301,6 +312,19 @@ async fn dismiss_notification(
         .map_err(|err| err.to_string())
 }
 
+#[tauri::command]
+async fn snooze(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let duration_mins = state.settings.get().snooze_duration_mins;
+    let duration = Duration::from_secs(duration_mins * 60);
+    *state.snooze_until.lock() = Some(std::time::Instant::now() + duration);
+    state.notifier.clear();
+    state
+        .notifier
+        .complete_current(&app)
+        .map_err(|err| err.to_string())?;
+    Ok(())
+}
+
 fn resolve_voice_dir(app: &AppHandle) -> Result<PathBuf> {
     const DEV_VOICE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../frontend/public/voice");
     if let Ok(path) = app.path().resolve("voice", BaseDirectory::Resource) {
@@ -493,6 +517,7 @@ fn main() {
                 gmail: gmail.clone(),
                 notifier: notifier.clone(),
                 auth_prompted: Arc::new(AtomicBool::new(false)),
+                snooze_until: Arc::new(Mutex::new(None)),
             });
 
             ensure_autostart(&app_handle, settings.get().auto_launch);
@@ -533,6 +558,7 @@ fn main() {
             mark_message_read,
             open_in_browser,
             dismiss_notification,
+            snooze,
             current_notification,
             list_voice_tracks
         ])
