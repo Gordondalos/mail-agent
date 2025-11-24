@@ -90,7 +90,7 @@ export class SettingsPage implements OnInit {
         gmail_query: this.model.gmail_query,
         oauth_client_id: this.model.oauth_client_id,
         oauth_client_secret: this.model.oauth_client_secret || null,
-        playback_volume: Number(this.model.playback_volume),
+        playback_volume: Number(String(this.model.playback_volume).replace(',', '.')),
         snooze_duration_mins: Number(this.model.snooze_duration_mins)
       };
       const saved = await this.settingsSvc.update(update);
