@@ -11,6 +11,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use parking_lot::Mutex;
+
 use anyhow::Result;
 use config::{Settings, SettingsManager, SettingsUpdate};
 use gmail::{wait_for_authorisation, GmailClient, GmailNotification};
