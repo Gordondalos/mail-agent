@@ -453,12 +453,8 @@ fn register_tray(app: &tauri::App) -> tauri::Result<()> {
                 if button == MouseButton::Left {
                     let handle = tray.app_handle();
                     if let Some(win) = handle.get_webview_window("main") {
-                        if win.is_visible().unwrap_or(false) {
-                            let _ = win.hide();
-                        } else {
-                            let _ = win.show();
-                            let _ = win.set_focus();
-                        }
+                        let _ = win.show();
+                        let _ = win.set_focus();
                     }
                 }
             }
