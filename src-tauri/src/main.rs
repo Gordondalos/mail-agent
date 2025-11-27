@@ -49,56 +49,82 @@ struct AppState {
 
 impl AppState {
     async fn poll_once(&self, app: &AppHandle) -> Result<()> {
+        info!("poll_once: старт проверки");
+
         if !self.oauth.is_configured() {
+            info!("poll_once: нет OAuth конфигурации, просим авторизацию");
             self.prompt_auth_once(app, AUTH_CONFIG_MESSAGE);
+            info!("poll_once: выходим из проверки без запроса");
             return Ok(());
         }
 
         if let Some(until) = *self.snooze_until.lock() {
+            info!("poll_once: snooze активен до {until:?}");
             if std::time::Instant::now() < until {
                 debug!("gmail polling snoozed");
                 return Ok(());
             } else {
+                info!("poll_once: время snooze истекло");
                 *self.snooze_until.lock() = None;
+
+                info!("poll_once: вызываем повторное показ уведомления");
+                let settings = self.settings.get();
+                let replay_result = self.notifier.replay_current(app, &settings);
+                match replay_result {
+                    Ok(true) => {
+                        info!("poll_once: уведомление успешно показано повторно, завершаем проверку");
+                        return Ok(());
+                    }
+                    Ok(false) => {
+                        info!("poll_once: текущего уведомления нет, очищаем кэш Gmail и продолжаем");
+                        self.gmail.clear_cache();
+                    }
+                    Err(err) => {
+                        warn!(%err, "poll_once: ошибка повторного показа, очищаем кэш Gmail и продолжаем");
+                        self.gmail.clear_cache();
+                    }
+                }
             }
         }
 
+        info!("poll_once: отправляем запрос в Gmail на непрочитанные письма");
         match self
             .gmail
             .fetch_unread(&self.settings.get().gmail_query)
             .await
         {
             Ok(messages) => {
+                info!("poll_once: Gmail вернул {count} писем", count = messages.len());
                 self.reset_auth_prompt();
                 let settings = self.settings.get();
                 for message in messages {
                     if let Ok(json) = serde_json::to_string(&message) {
-                        debug!(notification_json = %json, "gmail: notification payload");
+                        debug!(notification_json = %json, "gmail: письмо для уведомления");
                     }
                     if let Err(err) = self.notifier.enqueue(app, message, &settings) {
-                        warn!(%err, "failed to enqueue notification");
+                        warn!(%err, "poll_once: не удалось добавить уведомление в очередь");
                     }
                 }
             }
             Err(err) => {
+                warn!(%err, "poll_once: ошибка запроса в Gmail");
                 if let Some(kind) = err.downcast_ref::<OAuthError>() {
                     match kind {
                         OAuthError::NotAuthorised => {
+                            warn!("poll_once: Gmail говорит что нет авторизации");
                             self.notifier.clear();
                             self.prompt_auth_once(app, AUTH_REQUIRED_MESSAGE);
-                            warn!("gmail polling failed: not authorised");
                         }
                         OAuthError::Misconfigured(reason) => {
+                            warn!(reason = reason.as_str(), "poll_once: OAuth настроен неверно");
                             self.prompt_auth_once(app, reason.as_str());
-                            warn!(%err, "gmail polling failed");
                         }
-                        _ => warn!(%err, "gmail polling failed"),
+                        _ => {}
                     }
-                } else {
-                    warn!(%err, "gmail polling failed");
                 }
             }
         }
+        info!("poll_once: проверка завершена");
         Ok(())
     }
 
@@ -199,6 +225,8 @@ async fn update_settings(
 
 #[tauri::command]
 async fn check_now(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    info!("check_now: manual check requested");
+
     if !state.oauth.is_configured() {
         state.prompt_auth_force(&app, AUTH_CONFIG_MESSAGE);
         return Ok(());
@@ -218,6 +246,18 @@ async fn check_now(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> 
         }
     }
 
+    // Сбрасываем режим отложения при принудительной проверке
+    let was_snoozed = state.snooze_until.lock().is_some();
+    *state.snooze_until.lock() = None;
+    if was_snoozed {
+        info!("check_now: snooze cleared, clearing Gmail cache");
+
+        // Очищаем весь кэш Gmail
+        state.gmail.clear_cache();
+        info!("check_now: Gmail cache cleared");
+    }
+
+    info!("check_now: calling poll_once");
     state.poll_once(&app).await.map_err(|err| err.to_string())
 }
 
@@ -322,12 +362,17 @@ async fn dismiss_notification(
 async fn snooze(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
     let duration_mins = state.settings.get().snooze_duration_mins;
     let duration = Duration::from_secs(duration_mins * 60);
+
+    info!("snooze: setting snooze for {} minutes", duration_mins);
     *state.snooze_until.lock() = Some(std::time::Instant::now() + duration);
-    state.notifier.clear();
-    // Скрываем окно уведомления
+
+    // Скрываем окно уведомления, но не очищаем очередь
+    // Уведомления появятся снова после окончания snooze
     if let Some(win) = app.get_webview_window("alert") {
         let _ = win.hide();
     }
+
+    info!("snooze: window hidden, snooze active");
     Ok(())
 }
 
@@ -376,7 +421,7 @@ async fn current_notification(
 }
 
 fn register_tray(app: &tauri::App) -> tauri::Result<()> {
-    let check_now = MenuItem::with_id(app, "check_now", "Проверить сейчас", true, None::<&str>)?;
+    let check_now_item = MenuItem::with_id(app, "check_now", "Проверить сейчас", true, None::<&str>)?;
     let open_settings = MenuItem::with_id(
         app,
         "open_settings",
@@ -389,7 +434,7 @@ fn register_tray(app: &tauri::App) -> tauri::Result<()> {
     let quit = MenuItem::with_id(app, "quit", "Выйти из приложения", true, None::<&str>)?;
 
     let menu = MenuBuilder::new(app)
-        .item(&check_now)
+        .item(&check_now_item)
         .item(&open_settings)
         .separator()
         .item(&auth)
@@ -413,11 +458,11 @@ fn register_tray(app: &tauri::App) -> tauri::Result<()> {
         .on_menu_event(|app_handle, event| match event.id().as_ref() {
             "check_now" => {
                 info!("tray click: check_now");
-                let poll_handle = app_handle.clone();
-                let app_state = poll_handle.state::<AppState>().inner().clone();
+                let app_clone = app_handle.clone();
                 tauri::async_runtime::spawn(async move {
-                    if let Err(err) = app_state.poll_once(&poll_handle).await {
-                        warn!(%err, "manual poll failed");
+                    // Вызываем команду check_now, которая правильно обрабатывает snooze
+                    if let Err(err) = check_now(app_clone.clone(), app_clone.state()).await {
+                        warn!(%err, "manual check failed");
                     }
                 });
             }
@@ -540,12 +585,16 @@ fn main() {
             let app_state = app.state::<AppState>().inner().clone();
             let poll_handle = app_handle.clone();
             tauri::async_runtime::spawn(async move {
+                info!("polling loop started");
                 loop {
                     let interval = app_state.settings.get().poll_interval_secs;
+                    debug!("polling loop: calling poll_once");
                     if let Err(err) = app_state.poll_once(&poll_handle).await {
                         warn!(%err, "polling failed");
                     }
+                    debug!("polling loop: sleeping for {} seconds", interval.max(15));
                     sleep(Duration::from_secs(interval.max(15))).await;
+                    debug!("polling loop: woke up, next iteration");
                 }
             });
 

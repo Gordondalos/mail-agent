@@ -102,6 +102,11 @@ impl GmailClient {
         guard.pop(&id.to_string());
     }
 
+    pub fn clear_cache(&self) {
+        let mut guard = self.dedup.lock();
+        guard.clear();
+    }
+
     async fn fetch_message(&self, id: &str) -> Result<GmailNotification> {
         let token = self.token_provider.access_token().await?;
         let url = format!("{}/messages/{}", GMAIL_API, id);

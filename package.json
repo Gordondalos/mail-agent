@@ -10,7 +10,9 @@
     "build": "node scripts/build.js",
     "build:windows": "node -e \"if(process.platform!=='win32'){console.error('This script must be run on Windows');process.exit(1)}\" && npm run build",
     "build:linux": "node -e \"if(process.platform==='win32'){console.error('This script must be run on Linux');process.exit(1)}\" && npm run build",
-    "debug": "node scripts/debug.js"
+    "debug": "node scripts/debug.js",
+    "rebuild": "cargo build --manifest-path src-tauri/Cargo.toml",
+    "run:dev": "cd src-tauri/target/debug && gmail_tray_notifier.exe"
   },
   "keywords": [
     "tauri",
