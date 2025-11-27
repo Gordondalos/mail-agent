@@ -3,10 +3,10 @@ use std::collections::VecDeque;
 use anyhow::Result;
 use parking_lot::Mutex;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewWindow};
 use tracing::warn;
 
-use crate::gmail::GmailNotification;
+use crate::{config::Settings, gmail::GmailNotification};
 
 #[derive(Default)]
 pub struct NotificationQueue {
@@ -26,12 +26,12 @@ impl NotificationQueue {
         }
     }
 
-    pub fn enqueue(&self, app: &AppHandle, notification: GmailNotification) -> Result<()> {
+    pub fn enqueue(&self, app: &AppHandle, notification: GmailNotification, settings: &Settings) -> Result<()> {
         let mut state = self.inner.lock();
         if state.current.is_none() {
             state.current = Some(notification.clone());
             drop(state);
-            emit_notification(app, notification)?;
+            emit_notification(app, notification, settings)?;
         } else {
             state.pending.push_back(notification);
         }
@@ -42,13 +42,13 @@ impl NotificationQueue {
         self.inner.lock().current.clone()
     }
 
-    pub fn complete_current(&self, app: &AppHandle) -> Result<()> {
+    pub fn complete_current(&self, app: &AppHandle, settings: &Settings) -> Result<()> {
         let mut state = self.inner.lock();
         state.current = None;
         if let Some(next) = state.pending.pop_front() {
             state.current = Some(next.clone());
             drop(state);
-            emit_notification(app, next)?;
+            emit_notification(app, next, settings)?;
         } else if let Some(win) = app.get_webview_window("alert") {
             let _ = win.hide();
         }
@@ -62,8 +62,13 @@ impl NotificationQueue {
     }
 }
 
-fn emit_notification(app: &AppHandle, notification: GmailNotification) -> Result<()> {
+fn emit_notification(app: &AppHandle, notification: GmailNotification, settings: &Settings) -> Result<()> {
     if let Some(win) = app.get_webview_window("alert") {
+        // Применяем размеры из настроек
+        let _ = win.set_size(PhysicalSize::new(
+            settings.notification_width,
+            settings.notification_height,
+        ));
         place_alert_window(&win);
         let _ = win.show();
         let _ = win.set_focus();

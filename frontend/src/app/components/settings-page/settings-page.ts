@@ -8,10 +8,11 @@ import { MatInputModule } from '@angular/material/input';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSelectModule, MatSelectChange } from '@angular/material/select';
+import { MatSliderModule } from '@angular/material/slider';
 
 @Component({
   selector: 'app-settings-page',
-  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatCheckboxModule, MatButtonModule, MatSelectModule],
+  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatCheckboxModule, MatButtonModule, MatSelectModule, MatSliderModule],
   templateUrl: './settings-page.component.html',
   styleUrls: ['./settings-page.component.css']
 })
@@ -29,7 +30,10 @@ export class SettingsPage implements OnInit {
     gmail_query: 'in:inbox is:unread',
     oauth_client_id: '',
     oauth_client_secret: '',
-    snooze_duration_mins: 20
+    snooze_duration_mins: 20,
+    notification_width: 650,
+    notification_height: 150,
+    notification_opacity: 0.95
   };
 
   constructor(private readonly settingsSvc: Settings, private readonly ipc: Ipc) { }
@@ -91,7 +95,10 @@ export class SettingsPage implements OnInit {
         oauth_client_id: this.model.oauth_client_id,
         oauth_client_secret: this.model.oauth_client_secret || null,
         playback_volume: Number(String(this.model.playback_volume).replace(',', '.')),
-        snooze_duration_mins: Number(this.model.snooze_duration_mins)
+        snooze_duration_mins: Number(this.model.snooze_duration_mins),
+        notification_width: Number(this.model.notification_width),
+        notification_height: Number(this.model.notification_height),
+        notification_opacity: Number(String(this.model.notification_opacity).replace(',', '.'))
       };
       const saved = await this.settingsSvc.update(update);
       this.model = { ...this.model, ...saved };

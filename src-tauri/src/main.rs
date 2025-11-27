@@ -70,11 +70,12 @@ impl AppState {
         {
             Ok(messages) => {
                 self.reset_auth_prompt();
+                let settings = self.settings.get();
                 for message in messages {
                     if let Ok(json) = serde_json::to_string(&message) {
                         debug!(notification_json = %json, "gmail: notification payload");
                     }
-                    if let Err(err) = self.notifier.enqueue(app, message) {
+                    if let Err(err) = self.notifier.enqueue(app, message, &settings) {
                         warn!(%err, "failed to enqueue notification");
                     }
                 }
@@ -227,13 +228,14 @@ async fn mark_message_read(
     message_id: String,
 ) -> Result<(), String> {
     let notifier = state.notifier.clone();
+    let settings = state.settings.get();
     state
         .mark_read(&message_id)
         .await
         .map_err(|err| err.to_string())?;
     state.gmail.forget(&message_id);
     notifier
-        .complete_current(&app)
+        .complete_current(&app, &settings)
         .map_err(|err| err.to_string())?;
     Ok(())
 }
@@ -244,9 +246,10 @@ async fn open_in_browser(
     state: tauri::State<'_, AppState>,
     url: String,
 ) -> Result<(), String> {
+    let settings = state.settings.get();
     state
         .notifier
-        .complete_current(&app)
+        .complete_current(&app, &settings)
         .map_err(|err| err.to_string())?;
     webbrowser::open(&url)
         .map_err(|err| err.to_string())
@@ -308,9 +311,10 @@ async fn dismiss_notification(
     if let Some(id) = message_id {
         state.gmail.forget(&id);
     }
+    let settings = state.settings.get();
     state
         .notifier
-        .complete_current(&app)
+        .complete_current(&app, &settings)
         .map_err(|err| err.to_string())
 }
 
@@ -320,10 +324,10 @@ async fn snooze(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<(),
     let duration = Duration::from_secs(duration_mins * 60);
     *state.snooze_until.lock() = Some(std::time::Instant::now() + duration);
     state.notifier.clear();
-    state
-        .notifier
-        .complete_current(&app)
-        .map_err(|err| err.to_string())?;
+    // Скрываем окно уведомления
+    if let Some(win) = app.get_webview_window("alert") {
+        let _ = win.hide();
+    }
     Ok(())
 }
 

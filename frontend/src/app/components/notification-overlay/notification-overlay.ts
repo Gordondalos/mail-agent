@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, signal, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { TauriDragWindowDirective } from '../tauri-drag-window.directive';
@@ -31,12 +31,16 @@ export class NotificationOverlay implements OnInit, OnDestroy {
   unlistenFns: UnlistenFn[] = [];
   private dateFormatter: Intl.DateTimeFormat | null = null;
 
-  constructor(private readonly ipc: Ipc) {
+  constructor(
+    private readonly ipc: Ipc,
+    private elementRef: ElementRef
+  ) {
   }
 
   async ngOnInit() {
     const state = await this.ipc.invoke<{ settings: any; authorised: boolean }>('initialise');
     this.settings = state.settings;
+    this.applyOpacity();
 
     this.unlistenFns.push(await this.ipc.on('gmail://notification', async (n: NotificationPayload) => {
       console.debug('[gmail notification]', JSON.stringify(n, null, 2));
@@ -46,13 +50,33 @@ export class NotificationOverlay implements OnInit, OnDestroy {
     }));
     this.unlistenFns.push(await this.ipc.on('gmail://settings', (s: any) => {
       this.settings = s;
+      this.applyOpacity();
     }));
 
     await this.restoreCurrent();
+
+    // Добавляем обработчики для изменения прозрачности при наведении
+    const shell = this.elementRef.nativeElement.querySelector('.alert-shell');
+    if (shell) {
+      shell.addEventListener('mouseenter', () => {
+        shell.style.opacity = '1';
+      });
+      shell.addEventListener('mouseleave', () => {
+        this.applyOpacity();
+      });
+    }
   }
 
   ngOnDestroy() {
     this.unlistenFns.forEach(u => u());
+  }
+
+  private applyOpacity() {
+    const opacity = this.settings?.notification_opacity ?? 0.95;
+    const shell = this.elementRef.nativeElement.querySelector('.alert-shell');
+    if (shell) {
+      shell.style.opacity = opacity.toString();
+    }
   }
 
   async open() {
@@ -96,7 +120,6 @@ export class NotificationOverlay implements OnInit, OnDestroy {
   }
 
   async snooze() {
-    const n = this.notification();
     this.notification.set(null);
     this.visible.set(false);
     await this.hideWindow();

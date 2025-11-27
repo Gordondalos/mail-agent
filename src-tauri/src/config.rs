@@ -19,6 +19,9 @@ pub struct Settings {
     pub oauth_client_secret: Option<String>,
     pub playback_volume: f32,
     pub snooze_duration_mins: u64,
+    pub notification_width: u32,
+    pub notification_height: u32,
+    pub notification_opacity: f32,
 }
 
 impl Default for Settings {
@@ -33,6 +36,9 @@ impl Default for Settings {
             oauth_client_secret: None,
             playback_volume: 0.7,
             snooze_duration_mins: 20,
+            notification_width: 650,
+            notification_height: 150,
+            notification_opacity: 0.95,
         }
     }
 }
@@ -48,6 +54,9 @@ pub struct SettingsUpdate {
     pub oauth_client_secret: Option<Option<String>>,
     pub playback_volume: Option<f32>,
     pub snooze_duration_mins: Option<u64>,
+    pub notification_width: Option<u32>,
+    pub notification_height: Option<u32>,
+    pub notification_opacity: Option<f32>,
 }
 
 pub struct SettingsManager {
@@ -97,6 +106,15 @@ impl SettingsManager {
         }
         if let Some(value) = update.snooze_duration_mins {
             guard.snooze_duration_mins = value.clamp(1, 1440);
+        }
+        if let Some(value) = update.notification_width {
+            guard.notification_width = value.clamp(300, 1200);
+        }
+        if let Some(value) = update.notification_height {
+            guard.notification_height = value.clamp(100, 600);
+        }
+        if let Some(value) = update.notification_opacity {
+            guard.notification_opacity = value.clamp(0.1, 1.0);
         }
         save_settings(&self.path, &guard)?;
         Ok(guard.clone())

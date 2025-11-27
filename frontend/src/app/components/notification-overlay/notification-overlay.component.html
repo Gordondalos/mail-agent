@@ -19,11 +19,10 @@
       <div class="alert-title">
         {{ n.subject || '(без темы)' }}
         <span class="alert-date" *ngIf="n.receivedAt as received">
-          ({{ formatDate(received) }})
+          {{ formatDate(received) }}
         </span>
 
       </div>
-      <div class="alert-meta">{{ n.sender || 'Gmail' }}</div>
       <div class="alert-snippet">{{ n.snippet || '' }}</div>
     </div>
     <div class="alert-actions" data-tauri-drag-region="false">
