@@ -33,7 +33,9 @@ export class SettingsPage implements OnInit {
     snooze_duration_mins: 20,
     notification_width: 650,
     notification_height: 150,
-    notification_opacity: 0.95
+    notification_opacity: 0.95,
+    notification_expanded_width: 800,
+    notification_expanded_height: 600
   };
 
   constructor(private readonly settingsSvc: Settings, private readonly ipc: Ipc) { }
@@ -98,7 +100,9 @@ export class SettingsPage implements OnInit {
         snooze_duration_mins: Number(this.model.snooze_duration_mins),
         notification_width: Number(this.model.notification_width),
         notification_height: Number(this.model.notification_height),
-        notification_opacity: Number(String(this.model.notification_opacity).replace(',', '.'))
+        notification_opacity: Number(String(this.model.notification_opacity).replace(',', '.')),
+        notification_expanded_width: Number(this.model.notification_expanded_width),
+        notification_expanded_height: Number(this.model.notification_expanded_height)
       };
       const saved = await this.settingsSvc.update(update);
       this.model = { ...this.model, ...saved };

@@ -22,6 +22,8 @@ pub struct Settings {
     pub notification_width: u32,
     pub notification_height: u32,
     pub notification_opacity: f32,
+    pub notification_expanded_width: u32,
+    pub notification_expanded_height: u32,
 }
 
 impl Default for Settings {
@@ -39,6 +41,8 @@ impl Default for Settings {
             notification_width: 650,
             notification_height: 150,
             notification_opacity: 0.95,
+            notification_expanded_width: 800,
+            notification_expanded_height: 600,
         }
     }
 }
@@ -57,6 +61,8 @@ pub struct SettingsUpdate {
     pub notification_width: Option<u32>,
     pub notification_height: Option<u32>,
     pub notification_opacity: Option<f32>,
+    pub notification_expanded_width: Option<u32>,
+    pub notification_expanded_height: Option<u32>,
 }
 
 pub struct SettingsManager {
@@ -115,6 +121,12 @@ impl SettingsManager {
         }
         if let Some(value) = update.notification_opacity {
             guard.notification_opacity = value.clamp(0.1, 1.0);
+        }
+        if let Some(value) = update.notification_expanded_width {
+            guard.notification_expanded_width = value.clamp(400, 1920);
+        }
+        if let Some(value) = update.notification_expanded_height {
+            guard.notification_expanded_height = value.clamp(300, 1080);
         }
         save_settings(&self.path, &guard)?;
         Ok(guard.clone())

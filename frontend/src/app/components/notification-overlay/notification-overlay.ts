@@ -5,7 +5,7 @@ import { TauriDragWindowDirective } from '../tauri-drag-window.directive';
 import { Ipc } from '../../services/ipc';
 import { UnlistenFn } from '@tauri-apps/api/event';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
 
 type NotificationPayload = {
   id: string;
@@ -16,6 +16,7 @@ type NotificationPayload = {
   recipient?: string | null;
   receivedAt?: string | null;
   url: string;
+  body?: string | null;
 };
 
 @Component({
@@ -31,6 +32,7 @@ export class NotificationOverlay implements OnInit, OnDestroy {
   settings: any | null = null;
   unlistenFns: UnlistenFn[] = [];
   private dateFormatter: Intl.DateTimeFormat | null = null;
+  isExpanded = signal<boolean>(false);
 
   constructor(
     private readonly ipc: Ipc
@@ -209,5 +211,24 @@ export class NotificationOverlay implements OnInit, OnDestroy {
     const textarea = document.createElement('textarea');
     textarea.innerHTML = text;
     return textarea.value;
+  }
+
+  async toggleExpand() {
+    const window = getCurrentWindow();
+    const isCurrentlyExpanded = this.isExpanded();
+
+    if (!isCurrentlyExpanded) {
+      // Разворачиваем окно
+      const expandedWidth = this.settings?.notification_expanded_width ?? 800;
+      const expandedHeight = this.settings?.notification_expanded_height ?? 600;
+      await window.setSize(new LogicalSize(expandedWidth, expandedHeight));
+      this.isExpanded.set(true);
+    } else {
+      // Сворачиваем окно обратно
+      const normalWidth = this.settings?.notification_width ?? 650;
+      const normalHeight = this.settings?.notification_height ?? 150;
+      await window.setSize(new LogicalSize(normalWidth, normalHeight));
+      this.isExpanded.set(false);
+    }
   }
 }

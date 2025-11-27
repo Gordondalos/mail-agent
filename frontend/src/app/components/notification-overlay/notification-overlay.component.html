@@ -3,6 +3,7 @@
   appTauriDragWindow
   data-tauri-drag-region
   *ngIf="current() as n"
+  (dblclick)="toggleExpand()"
 >
   <div class="alert-card">
     <button
@@ -29,7 +30,10 @@
       <div class="alert-recipient" *ngIf="n.recipient">
         <strong>Кому:</strong> {{ decodeHtmlEntities(n.recipient) }}
       </div>
-      <div class="alert-snippet">{{ n.snippet || '' }}</div>
+      <div class="alert-snippet" *ngIf="!isExpanded()">{{ n.snippet || '' }}</div>
+
+      <!-- Развёрнутое содержимое письма -->
+      <div class="alert-body" *ngIf="isExpanded() && n.body" [innerHTML]="n.body"></div>
     </div>
     <div class="alert-actions" data-tauri-drag-region="false">
       <button class="open" (click)="open()">Перейти</button>

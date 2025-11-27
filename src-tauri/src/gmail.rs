@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
+use base64::{Engine as _, engine::general_purpose::STANDARD as base64};
 use chrono::{DateTime, Utc};
 use lru::LruCache;
 use parking_lot::Mutex;
@@ -26,6 +27,7 @@ pub struct GmailNotification {
     pub recipient: Option<String>,
     pub received_at: Option<DateTime<Utc>>,
     pub url: String,
+    pub body: Option<String>,
 }
 
 #[derive(Clone)]
@@ -117,11 +119,7 @@ impl GmailClient {
             .get(url)
             .bearer_auth(token)
             .query(&[
-                ("format", "metadata"),
-                ("metadataHeaders", "Subject"),
-                ("metadataHeaders", "From"),
-                ("metadataHeaders", "To"),
-                ("metadataHeaders", "Date"),
+                ("format", "full"),
             ])
             .send()
             .await
@@ -206,6 +204,23 @@ struct Message {
 #[derive(Debug, Deserialize)]
 struct MessagePayload {
     headers: Vec<Header>,
+    #[serde(default)]
+    parts: Vec<MessagePart>,
+    body: Option<MessageBody>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct MessagePart {
+    #[serde(rename = "mimeType")]
+    mime_type: String,
+    body: Option<MessageBody>,
+    #[serde(default)]
+    parts: Vec<MessagePart>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct MessageBody {
+    data: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -246,6 +261,10 @@ impl Message {
             "https://mail.google.com/mail/u/0/#inbox/{message}",
             message = self.id
         );
+
+        // Извлекаем тело письма (приоритет: HTML, затем plain text)
+        let body = extract_body(&self.payload);
+
         GmailNotification {
             id: self.id,
             thread_id: self.thread_id,
@@ -255,8 +274,63 @@ impl Message {
             recipient,
             received_at,
             url,
+            body,
         }
     }
+}
+
+fn extract_body(payload: &MessagePayload) -> Option<String> {
+    // Сначала пытаемся найти HTML версию
+    if let Some(html) = find_part_by_mime(payload, "text/html") {
+        return decode_body(&html);
+    }
+
+    // Затем пытаемся найти plain text
+    if let Some(text) = find_part_by_mime(payload, "text/plain") {
+        return decode_body(&text);
+    }
+
+    // Если нет частей, проверяем body непосредственно в payload
+    if let Some(ref body) = payload.body {
+        return decode_body(body);
+    }
+
+    None
+}
+
+fn find_part_by_mime(payload: &MessagePayload, mime_type: &str) -> Option<MessageBody> {
+    // Рекурсивный поиск по частям
+    for part in &payload.parts {
+        if part.mime_type == mime_type {
+            if let Some(ref body) = part.body {
+                return Some(MessageBody { data: body.data.clone() });
+            }
+        }
+
+        // Рекурсивный поиск во вложенных частях
+        if !part.parts.is_empty() {
+            let nested_payload = MessagePayload {
+                headers: vec![],
+                parts: part.parts.clone(),
+                body: None,
+            };
+            if let Some(body) = find_part_by_mime(&nested_payload, mime_type) {
+                return Some(body);
+            }
+        }
+    }
+
+    None
+}
+
+fn decode_body(body: &MessageBody) -> Option<String> {
+    body.data.as_ref().and_then(|data| {
+        // Gmail использует URL-safe Base64
+        let replaced = data.replace('-', "+").replace('_', "/");
+        base64.decode(&replaced)
+            .ok()
+            .and_then(|bytes| String::from_utf8(bytes).ok())
+    })
 }
 
 pub async fn wait_for_authorisation(token_provider: Arc<dyn AccessTokenProvider>) -> bool {

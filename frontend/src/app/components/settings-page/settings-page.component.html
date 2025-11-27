@@ -39,6 +39,20 @@
                 name="notificationHeight" />
         </mat-form-field>
 
+        <h4>Размеры развёрнутого окна (двойной клик)</h4>
+
+        <mat-form-field appearance="outline">
+            <mat-label>Ширина развёрнутого окна (px)</mat-label>
+            <input matInput type="number" min="400" max="1920" [(ngModel)]="model.notification_expanded_width"
+                name="notificationExpandedWidth" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+            <mat-label>Высота развёрнутого окна (px)</mat-label>
+            <input matInput type="number" min="300" max="1080" [(ngModel)]="model.notification_expanded_height"
+                name="notificationExpandedHeight" />
+        </mat-form-field>
+
         <div class="opacity-slider">
             <label>Прозрачность: {{ model.notification_opacity }}</label>
             <mat-slider min="0.1" max="1" step="0.05" showTickMarks discrete>
