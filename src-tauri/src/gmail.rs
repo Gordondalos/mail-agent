@@ -140,6 +140,14 @@ impl GmailClient {
             .json()
             .await
             .context("invalid gmail message response")?;
+        debug!("fetch_message: получено сообщение id={}, payload.parts.len={}", details.id, details.payload.parts.len());
+        debug!("fetch_message: payload.body.is_some={}", details.payload.body.is_some());
+        if !details.payload.parts.is_empty() {
+            for (i, part) in details.payload.parts.iter().enumerate() {
+                debug!("fetch_message: часть[{}] mime_type={}, body.is_some={}, parts.len={}",
+                    i, part.mime_type, part.body.is_some(), part.parts.len());
+            }
+        }
         Ok(details.into_notification())
     }
 
@@ -264,6 +272,10 @@ impl Message {
 
         // Извлекаем тело письма (приоритет: HTML, затем plain text)
         let body = extract_body(&self.payload);
+        debug!("into_notification: тело письма извлечено, есть ли body = {}", body.is_some());
+        if let Some(ref b) = body {
+            debug!("into_notification: длина тела = {}", b.len());
+        }
 
         GmailNotification {
             id: self.id,
@@ -280,35 +292,90 @@ impl Message {
 }
 
 fn extract_body(payload: &MessagePayload) -> Option<String> {
+    debug!("extract_body: начало извлечения тела письма");
+    debug!("extract_body: количество частей = {}", payload.parts.len());
+
+    // Логируем структуру частей для отладки
+    for (i, part) in payload.parts.iter().enumerate() {
+        debug!("extract_body: часть[{}]: mime_type={}, has_body={}, has_parts={}",
+            i, part.mime_type, part.body.is_some(), !part.parts.is_empty());
+    }
+
     // Сначала пытаемся найти HTML версию
     if let Some(html) = find_part_by_mime(payload, "text/html") {
-        return decode_body(&html);
+        debug!("extract_body: найден HTML");
+        let decoded = decode_body(&html);
+        debug!("extract_body: HTML декодирован, результат = {}", decoded.is_some());
+        if decoded.is_some() {
+            return decoded;
+        }
     }
 
     // Затем пытаемся найти plain text
     if let Some(text) = find_part_by_mime(payload, "text/plain") {
-        return decode_body(&text);
+        debug!("extract_body: найден plain text");
+        let decoded = decode_body(&text);
+        debug!("extract_body: plain text декодирован, результат = {}", decoded.is_some());
+        if decoded.is_some() {
+            return decoded;
+        }
     }
 
     // Если нет частей, проверяем body непосредственно в payload
     if let Some(ref body) = payload.body {
-        return decode_body(body);
+        debug!("extract_body: используем body из payload");
+        let decoded = decode_body(body);
+        debug!("extract_body: body декодирован, результат = {}", decoded.is_some());
+        if decoded.is_some() {
+            return decoded;
+        }
     }
 
+    debug!("extract_body: тело письма не найдено");
     None
 }
 
 fn find_part_by_mime(payload: &MessagePayload, mime_type: &str) -> Option<MessageBody> {
+    debug!("find_part_by_mime: ищем тип {}", mime_type);
     // Рекурсивный поиск по частям
     for part in &payload.parts {
+        debug!("find_part_by_mime: проверяем часть с типом {}", part.mime_type);
+
+        // Если это multipart контейнер, сначала проверяем его подчасти
+        if part.mime_type.starts_with("multipart/") {
+            debug!("find_part_by_mime: найден multipart контейнер, проверяем {} вложенных частей", part.parts.len());
+            if !part.parts.is_empty() {
+                let nested_payload = MessagePayload {
+                    headers: vec![],
+                    parts: part.parts.clone(),
+                    body: None,
+                };
+                if let Some(body) = find_part_by_mime(&nested_payload, mime_type) {
+                    return Some(body);
+                }
+            }
+            continue;
+        }
+
+        // Проверяем совпадение типа
         if part.mime_type == mime_type {
             if let Some(ref body) = part.body {
-                return Some(MessageBody { data: body.data.clone() });
+                debug!("find_part_by_mime: найдено тело для типа {}, data.is_some={}", mime_type, body.data.is_some());
+                if let Some(ref data) = body.data {
+                    debug!("find_part_by_mime: длина data={}", data.len());
+                    // Возвращаем только если есть данные
+                    if !data.is_empty() {
+                        return Some(MessageBody { data: body.data.clone() });
+                    }
+                }
+            } else {
+                debug!("find_part_by_mime: у части с типом {} нет body", mime_type);
             }
         }
 
         // Рекурсивный поиск во вложенных частях
         if !part.parts.is_empty() {
+            debug!("find_part_by_mime: у части есть {} вложенных частей", part.parts.len());
             let nested_payload = MessagePayload {
                 headers: vec![],
                 parts: part.parts.clone(),
@@ -320,16 +387,24 @@ fn find_part_by_mime(payload: &MessagePayload, mime_type: &str) -> Option<Messag
         }
     }
 
+    debug!("find_part_by_mime: тип {} не найден", mime_type);
     None
 }
 
 fn decode_body(body: &MessageBody) -> Option<String> {
+    debug!("decode_body: начало декодирования, есть ли data = {}", body.data.is_some());
     body.data.as_ref().and_then(|data| {
+        debug!("decode_body: длина закодированных данных = {}", data.len());
         // Gmail использует URL-safe Base64
         let replaced = data.replace('-', "+").replace('_', "/");
-        base64.decode(&replaced)
+        let decoded = base64.decode(&replaced)
             .ok()
-            .and_then(|bytes| String::from_utf8(bytes).ok())
+            .and_then(|bytes| {
+                debug!("decode_body: декодировано {} байт", bytes.len());
+                String::from_utf8(bytes).ok()
+            });
+        debug!("decode_body: результат декодирования = {}", decoded.is_some());
+        decoded
     })
 }
 

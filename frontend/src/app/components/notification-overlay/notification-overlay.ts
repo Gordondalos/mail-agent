@@ -1,11 +1,13 @@
 import { Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { TauriDragWindowDirective } from '../tauri-drag-window.directive';
 import { Ipc } from '../../services/ipc';
 import { UnlistenFn } from '@tauri-apps/api/event';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
+import { getCurrentWindow, LogicalSize, LogicalPosition, PhysicalPosition } from '@tauri-apps/api/window';
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 
 type NotificationPayload = {
   id: string;
@@ -33,9 +35,21 @@ export class NotificationOverlay implements OnInit, OnDestroy {
   unlistenFns: UnlistenFn[] = [];
   private dateFormatter: Intl.DateTimeFormat | null = null;
   isExpanded = signal<boolean>(false);
+  safeBody = computed<SafeHtml | null>(() => {
+    const n = this.current();
+    const expanded = this.isExpanded(); // Явная зависимость от isExpanded
+    console.log('safeBody computed: current=', n ? 'exists' : 'null', 'isExpanded=', expanded, 'hasBody=', !!n?.body);
+    if (!n?.body) {
+      console.log('safeBody: no body found');
+      return null;
+    }
+    console.log('safeBody: body length=', n.body.length, 'first 100 chars=', n.body.substring(0, 100));
+    return this.sanitizer.bypassSecurityTrustHtml(n.body);
+  });
 
   constructor(
-    private readonly ipc: Ipc
+    private readonly ipc: Ipc,
+    private readonly sanitizer: DomSanitizer
   ) {
   }
 
@@ -213,22 +227,86 @@ export class NotificationOverlay implements OnInit, OnDestroy {
     return textarea.value;
   }
 
+  getSafeBody(body: string | null | undefined): SafeHtml {
+    console.log('getSafeBody called with body length=', body?.length || 0);
+    if (!body) {
+      return '';
+    }
+    return this.sanitizer.bypassSecurityTrustHtml(body);
+  }
+
   async toggleExpand() {
-    const window = getCurrentWindow();
+    const tauriWindow: WebviewWindow | any = getCurrentWindow();
     const isCurrentlyExpanded = this.isExpanded();
+    console.log('toggleExpand: current state=', isCurrentlyExpanded, 'notification=', this.notification());
 
     if (!isCurrentlyExpanded) {
-      // Разворачиваем окно
-      const expandedWidth = this.settings?.notification_expanded_width ?? 800;
-      const expandedHeight = this.settings?.notification_expanded_height ?? 600;
-      await window.setSize(new LogicalSize(expandedWidth, expandedHeight));
+      console.log('toggleExpand: expanding window');
+      // Разворачиваем окно до размеров из настроек или на весь экран
+      let expandedWidth = this.settings?.notification_expanded_width;
+      let expandedHeight = this.settings?.notification_expanded_height;
+
+      // Если размеры не заданы в настройках, используем размер экрана
+      if (!expandedWidth || !expandedHeight || expandedWidth === 0 || expandedHeight === 0) {
+        try {
+          const monitor = await tauriWindow.currentMonitor();
+          if (monitor) {
+            expandedWidth = monitor.size.width;
+            expandedHeight = monitor.size.height;
+            // Позиционируем окно на весь экран
+            await tauriWindow.setPosition(new PhysicalPosition(monitor.position.x, monitor.position.y));
+          } else {
+            // Fallback размеры, если монитор не определен
+            expandedWidth = 1200;
+            expandedHeight = 800;
+          }
+        } catch (error) {
+          console.error('Failed to get monitor info', error);
+          expandedWidth = 1200;
+          expandedHeight = 800;
+        }
+      }
+
+      await tauriWindow.setSize(new LogicalSize(expandedWidth, expandedHeight));
+
+      // Центрируем окно, если это не полноэкранный режим
+      if (expandedWidth < 1900) {
+        try {
+          const monitor = await tauriWindow.currentMonitor();
+          if (monitor) {
+            const x = monitor.position.x + (monitor.size.width - expandedWidth) / 2;
+            const y = monitor.position.y + (monitor.size.height - expandedHeight) / 2;
+            await tauriWindow.setPosition(new LogicalPosition(Math.max(0, x), Math.max(0, y)));
+          }
+        } catch (error) {
+          console.error('Failed to center window', error);
+        }
+      }
+
       this.isExpanded.set(true);
+      console.log('toggleExpand: window expanded, isExpanded=', this.isExpanded());
     } else {
+      console.log('toggleExpand: collapsing window');
       // Сворачиваем окно обратно
       const normalWidth = this.settings?.notification_width ?? 650;
       const normalHeight = this.settings?.notification_height ?? 150;
-      await window.setSize(new LogicalSize(normalWidth, normalHeight));
+      await tauriWindow.setSize(new LogicalSize(normalWidth, normalHeight));
+
+      // Возвращаем окно в правый нижний угол
+      try {
+        const monitor = await tauriWindow.currentMonitor();
+        if (monitor) {
+          const margin = 64;
+          const x = monitor.position.x + monitor.size.width - normalWidth - margin;
+          const y = monitor.position.y + monitor.size.height - normalHeight - margin;
+          await tauriWindow.setPosition(new LogicalPosition(Math.max(monitor.position.x, x), Math.max(monitor.position.y, y)));
+        }
+      } catch (error) {
+        console.error('Failed to reposition window', error);
+      }
+
       this.isExpanded.set(false);
+      console.log('toggleExpand: window collapsed, isExpanded=', this.isExpanded());
     }
   }
 }

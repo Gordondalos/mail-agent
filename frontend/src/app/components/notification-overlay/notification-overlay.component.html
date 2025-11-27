@@ -22,7 +22,7 @@
         <span class="alert-date" *ngIf="n.receivedAt as received">
           {{ formatDate(received) }}
         </span>
-
+        <span class="alert-hint" *ngIf="!isExpanded()" title="Двойной клик для развертывания">⤢</span>
       </div>
       <div class="alert-sender" *ngIf="n.sender">
         <strong>От:</strong> {{ decodeHtmlEntities(n.sender) }}
@@ -33,7 +33,14 @@
       <div class="alert-snippet" *ngIf="!isExpanded()">{{ n.snippet || '' }}</div>
 
       <!-- Развёрнутое содержимое письма -->
-      <div class="alert-body" *ngIf="isExpanded() && n.body" [innerHTML]="n.body"></div>
+      <div class="alert-body" *ngIf="isExpanded()">
+        <!-- Debug info -->
+        <div style="background: #f0f0f0; padding: 8px; margin-bottom: 8px; font-size: 0.8em; border: 1px solid #ccc;">
+          <strong>Debug:</strong> isExpanded={{ isExpanded() }}, hasBody={{ !!n.body }}, bodyLength={{ n.body?.length || 0 }}
+        </div>
+        <div *ngIf="n.body" [innerHTML]="getSafeBody(n.body)"></div>
+        <p *ngIf="!n.body" style="color: #94a3b8; font-style: italic;">Содержимое письма недоступно</p>
+      </div>
     </div>
     <div class="alert-actions" data-tauri-drag-region="false">
       <button class="open" (click)="open()">Перейти</button>
