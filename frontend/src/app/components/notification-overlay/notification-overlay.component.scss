@@ -17,11 +17,6 @@
   align-items: stretch;
   justify-content: center;
   box-sizing: border-box;
-  transition: opacity 0.2s ease;
-
-  &:hover {
-    opacity: 1 !important;
-  }
 }
 
 .alert-card {
@@ -60,6 +55,31 @@
   opacity: 0.65;
   color: #64748b;
   white-space: nowrap;
+}
+
+.alert-sender {
+  font-size: 0.85rem;
+  color: #475569;
+  margin-top: 4px;
+  line-height: 1.4;
+
+  strong {
+    color: #1e293b;
+    font-weight: 600;
+  }
+}
+
+.alert-recipient {
+  font-size: 0.85rem;
+  color: #475569;
+  margin-top: 2px;
+  margin-left: 12px;
+  line-height: 1.4;
+
+  strong {
+    color: #1e293b;
+    font-weight: 600;
+  }
 }
 
 .alert-snippet {
@@ -132,8 +152,8 @@
 
 .alert-close {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: -6px;
+  right: -4px;
   cursor: pointer;
   border: none;
   background: rgba(255, 255, 255, 0.8);

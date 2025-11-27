@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, computed, signal, ElementRef } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { TauriDragWindowDirective } from '../tauri-drag-window.directive';
@@ -13,6 +13,7 @@ type NotificationPayload = {
   subject: string;
   snippet?: string | null;
   sender?: string | null;
+  recipient?: string | null;
   receivedAt?: string | null;
   url: string;
 };
@@ -32,8 +33,7 @@ export class NotificationOverlay implements OnInit, OnDestroy {
   private dateFormatter: Intl.DateTimeFormat | null = null;
 
   constructor(
-    private readonly ipc: Ipc,
-    private elementRef: ElementRef
+    private readonly ipc: Ipc
   ) {
   }
 
@@ -56,12 +56,12 @@ export class NotificationOverlay implements OnInit, OnDestroy {
     await this.restoreCurrent();
 
     // Добавляем обработчики для изменения прозрачности при наведении
-    const shell = this.elementRef.nativeElement.querySelector('.alert-shell');
-    if (shell) {
-      shell.addEventListener('mouseenter', () => {
-        shell.style.opacity = '1';
+    const appRoot = document.querySelector('app-root') as HTMLElement;
+    if (appRoot) {
+      appRoot.addEventListener('mouseenter', () => {
+        appRoot.style.backgroundColor = 'rgba(255, 255, 255, 1)';
       });
-      shell.addEventListener('mouseleave', () => {
+      appRoot.addEventListener('mouseleave', () => {
         this.applyOpacity();
       });
     }
@@ -73,9 +73,10 @@ export class NotificationOverlay implements OnInit, OnDestroy {
 
   private applyOpacity() {
     const opacity = this.settings?.notification_opacity ?? 0.95;
-    const shell = this.elementRef.nativeElement.querySelector('.alert-shell');
-    if (shell) {
-      shell.style.opacity = opacity.toString();
+    // Применяем прозрачность к app-root
+    const appRoot = document.querySelector('app-root') as HTMLElement;
+    if (appRoot) {
+      appRoot.style.backgroundColor = `rgba(255, 255, 255, ${opacity})`;
     }
   }
 
@@ -201,5 +202,12 @@ export class NotificationOverlay implements OnInit, OnDestroy {
     } catch {
       return value;
     }
+  }
+
+  decodeHtmlEntities(text: string | null | undefined): string {
+    if (!text) return '';
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = text;
+    return textarea.value;
   }
 }

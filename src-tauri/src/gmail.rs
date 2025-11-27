@@ -23,6 +23,7 @@ pub struct GmailNotification {
     pub subject: String,
     pub snippet: Option<String>,
     pub sender: Option<String>,
+    pub recipient: Option<String>,
     pub received_at: Option<DateTime<Utc>>,
     pub url: String,
 }
@@ -119,6 +120,7 @@ impl GmailClient {
                 ("format", "metadata"),
                 ("metadataHeaders", "Subject"),
                 ("metadataHeaders", "From"),
+                ("metadataHeaders", "To"),
                 ("metadataHeaders", "Date"),
             ])
             .send()
@@ -227,6 +229,12 @@ impl Message {
             .iter()
             .find(|h| h.name.eq_ignore_ascii_case("From"))
             .map(|h| h.value.clone());
+        let recipient = self
+            .payload
+            .headers
+            .iter()
+            .find(|h| h.name.eq_ignore_ascii_case("To"))
+            .map(|h| h.value.clone());
         let received_at = self
             .payload
             .headers
@@ -244,6 +252,7 @@ impl Message {
             subject,
             snippet: self.snippet,
             sender,
+            recipient,
             received_at,
             url,
         }

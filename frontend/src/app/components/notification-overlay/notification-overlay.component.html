@@ -8,8 +8,8 @@
     <button
       class="alert-close"
       type="button"
-      aria-label="Закрыть уведомление"
-      (click)="dismiss()"
+      aria-label="Отложить уведомление"
+      (click)="snooze()"
       data-tauri-drag-region="false"
     >
       <mat-icon>close</mat-icon>
@@ -22,6 +22,12 @@
           {{ formatDate(received) }}
         </span>
 
+      </div>
+      <div class="alert-sender" *ngIf="n.sender">
+        <strong>От:</strong> {{ decodeHtmlEntities(n.sender) }}
+      </div>
+      <div class="alert-recipient" *ngIf="n.recipient">
+        <strong>Кому:</strong> {{ decodeHtmlEntities(n.recipient) }}
       </div>
       <div class="alert-snippet">{{ n.snippet || '' }}</div>
     </div>
