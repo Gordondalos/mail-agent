@@ -46,16 +46,21 @@ impl NotificationQueue {
     }
 
     pub fn replay_current(&self, app: &AppHandle, settings: &Settings) -> Result<bool> {
-        info!("notifier.replay_current: пытаемся показать текущее уведомление заново");
+        info!("notifier.replay_current: шаг 1 - начало функции");
+        info!("notifier.replay_current: шаг 2 - блокируем mutex для чтения current");
         let current = self.inner.lock().current.clone();
+        info!("notifier.replay_current: шаг 3 - mutex разблокирован, current получен");
+
         match current {
             Some(notification) => {
-                info!("notifier.replay_current: найдено {} — запускаем emit_notification", notification.id);
+                info!("notifier.replay_current: шаг 4 - найдено уведомление id={}", notification.id);
+                info!("notifier.replay_current: шаг 5 - вызываем emit_notification");
                 emit_notification(app, notification, settings)?;
+                info!("notifier.replay_current: шаг 6 - emit_notification завершён успешно");
                 Ok(true)
             }
             None => {
-                info!("notifier.replay_current: активного уведомления нет");
+                info!("notifier.replay_current: шаг 4 - активного уведомления нет");
                 Ok(false)
             }
         }
@@ -86,21 +91,37 @@ impl NotificationQueue {
 }
 
 fn emit_notification(app: &AppHandle, notification: GmailNotification, settings: &Settings) -> Result<()> {
-    info!("emit_notification: выводим уведомление {}", notification.id);
+    info!("emit_notification: шаг 1 - начало для уведомления {}", notification.id);
+
+    info!("emit_notification: шаг 2 - пытаемся получить окно alert");
     if let Some(win) = app.get_webview_window("alert") {
-        info!("emit_notification: настраиваем окно уведомления");
-        // Применяем размеры из настроек
+        info!("emit_notification: шаг 3 - окно alert найдено");
+
+        info!("emit_notification: шаг 4 - устанавливаем размер окна");
         let _ = win.set_size(PhysicalSize::new(
             settings.notification_width,
             settings.notification_height,
         ));
+        info!("emit_notification: шаг 5 - размер установлен");
+
+        info!("emit_notification: шаг 6 - вызываем place_alert_window");
         place_alert_window(&win);
+        info!("emit_notification: шаг 7 - place_alert_window завершён");
+
+        info!("emit_notification: шаг 8 - вызываем win.show()");
         let _ = win.show();
+        info!("emit_notification: шаг 9 - win.show() завершён");
+
+        info!("emit_notification: шаг 10 - вызываем win.set_focus()");
         let _ = win.set_focus();
+        info!("emit_notification: шаг 11 - win.set_focus() завершён");
     } else {
-        warn!("emit_notification: окно alert не найдено");
+        warn!("emit_notification: шаг 3 - окно alert НЕ найдено");
     }
+
+    info!("emit_notification: шаг 12 - отправляем событие gmail://notification");
     app.emit("gmail://notification", &notification)?;
+    info!("emit_notification: шаг 13 - событие отправлено, функция завершена");
     Ok(())
 }
 

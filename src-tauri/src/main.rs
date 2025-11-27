@@ -58,33 +58,51 @@ impl AppState {
             return Ok(());
         }
 
-        if let Some(until) = *self.snooze_until.lock() {
-            info!("poll_once: snooze активен до {until:?}");
-            if std::time::Instant::now() < until {
-                debug!("gmail polling snoozed");
-                return Ok(());
+        // Проверяем snooze один раз и сразу освобождаем блокировку
+        let snooze_expired = {
+            let lock = self.snooze_until.lock();
+            if let Some(until) = *lock {
+                if std::time::Instant::now() < until {
+                    debug!("gmail polling snoozed");
+                    return Ok(());
+                }
+                true // snooze истёк
             } else {
-                info!("poll_once: время snooze истекло");
-                *self.snooze_until.lock() = None;
+                false // snooze не был активен
+            }
+        }; // блокировка освобождена
 
-                info!("poll_once: вызываем повторное показ уведомления");
-                let settings = self.settings.get();
-                let replay_result = self.notifier.replay_current(app, &settings);
-                match replay_result {
-                    Ok(true) => {
-                        info!("poll_once: уведомление успешно показано повторно, завершаем проверку");
-                        return Ok(());
-                    }
-                    Ok(false) => {
-                        info!("poll_once: текущего уведомления нет, очищаем кэш Gmail и продолжаем");
-                        self.gmail.clear_cache();
-                    }
-                    Err(err) => {
-                        warn!(%err, "poll_once: ошибка повторного показа, очищаем кэш Gmail и продолжаем");
-                        self.gmail.clear_cache();
-                    }
+        if snooze_expired {
+            info!("poll_once: время snooze истекло");
+            info!("poll_once: шаг 1 - сбрасываем snooze_until");
+            *self.snooze_until.lock() = None;
+            info!("poll_once: шаг 2 - snooze_until сброшен");
+
+            info!("poll_once: шаг 3 - получаем настройки");
+            let settings = self.settings.get();
+            info!("poll_once: шаг 4 - настройки получены");
+
+            info!("poll_once: шаг 5 - вызываем notifier.replay_current");
+            let replay_result = self.notifier.replay_current(app, &settings);
+            info!("poll_once: шаг 6 - replay_current вернул результат");
+
+            match replay_result {
+                Ok(true) => {
+                    info!("poll_once: шаг 7а - уведомление успешно показано повторно, завершаем проверку");
+                    return Ok(());
+                }
+                Ok(false) => {
+                    info!("poll_once: шаг 7б - текущего уведомления нет, очищаем кэш Gmail");
+                    self.gmail.clear_cache();
+                    info!("poll_once: шаг 8 - кэш Gmail очищен");
+                }
+                Err(err) => {
+                    warn!(%err, "poll_once: шаг 7в - ошибка повторного показа");
+                    self.gmail.clear_cache();
+                    info!("poll_once: шаг 8 - кэш Gmail очищен после ошибки");
                 }
             }
+            info!("poll_once: шаг 9 - продолжаем к проверке Gmail");
         }
 
         info!("poll_once: отправляем запрос в Gmail на непрочитанные письма");
