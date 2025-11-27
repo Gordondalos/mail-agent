@@ -268,9 +268,18 @@ async fn check_now(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> 
     let was_snoozed = state.snooze_until.lock().is_some();
     *state.snooze_until.lock() = None;
     if was_snoozed {
-        info!("check_now: snooze cleared, clearing Gmail cache");
+        info!("check_now: snooze cleared");
 
-        // Очищаем весь кэш Gmail
+        // Сначала пытаемся показать текущее уведомление из очереди
+        let settings = state.settings.get();
+        info!("check_now: пытаемся показать текущее уведомление из очереди");
+        if let Ok(true) = state.notifier.replay_current(&app, &settings) {
+            info!("check_now: уведомление из очереди показано, завершаем");
+            return Ok(());
+        }
+        info!("check_now: в очереди нет уведомлений, очищаем кэш Gmail");
+
+        // Если уведомления нет, очищаем кэш и продолжаем
         state.gmail.clear_cache();
         info!("check_now: Gmail cache cleared");
     }
