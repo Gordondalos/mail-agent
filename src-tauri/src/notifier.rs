@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 
 use anyhow::Result;
 use parking_lot::Mutex;
@@ -26,7 +26,12 @@ impl NotificationQueue {
         }
     }
 
-    pub fn enqueue(&self, app: &AppHandle, notification: GmailNotification, settings: &Settings) -> Result<()> {
+    pub fn enqueue(
+        &self,
+        app: &AppHandle,
+        notification: GmailNotification,
+        settings: &Settings,
+    ) -> Result<()> {
         info!("notifier.enqueue: получено уведомление {}", notification.id);
         let mut state = self.inner.lock();
         if state.current.is_none() {
@@ -35,7 +40,10 @@ impl NotificationQueue {
             drop(state);
             emit_notification(app, notification, settings)?;
         } else {
-            info!("notifier.enqueue: есть активное ��ведомление, кладём в очередь ({} элементов)", state.pending.len());
+            info!(
+                "notifier.enqueue: есть активное ��ведомление, кладём в очередь ({} элементов)",
+                state.pending.len()
+            );
             state.pending.push_back(notification);
         }
         Ok(())
@@ -53,7 +61,10 @@ impl NotificationQueue {
 
         match current {
             Some(notification) => {
-                info!("notifier.replay_current: шаг 4 - найдено уведомление id={}", notification.id);
+                info!(
+                    "notifier.replay_current: шаг 4 - найдено уведомление id={}",
+                    notification.id
+                );
                 info!("notifier.replay_current: шаг 5 - вызываем emit_notification");
                 emit_notification(app, notification, settings)?;
                 info!("notifier.replay_current: шаг 6 - emit_notification завершён успешно");
@@ -71,7 +82,10 @@ impl NotificationQueue {
         let mut state = self.inner.lock();
         state.current = None;
         if let Some(next) = state.pending.pop_front() {
-            info!("notifier.complete_current: берём следующее уведомление {}", next.id);
+            info!(
+                "notifier.complete_current: берём следующее уведомление {}",
+                next.id
+            );
             state.current = Some(next.clone());
             drop(state);
             emit_notification(app, next, settings)?;
@@ -95,9 +109,31 @@ impl NotificationQueue {
         state.pending.retain(|notification| notification.id != id);
         before != state.pending.len()
     }
+
+    pub fn prune_read(&self, read_ids: &HashSet<String>) -> Option<GmailNotification> {
+        let mut state = self.inner.lock();
+        state
+            .pending
+            .retain(|notification| !read_ids.contains(&notification.id));
+        if state
+            .current
+            .as_ref()
+            .is_some_and(|notification| read_ids.contains(&notification.id))
+        {
+            state.current = state.pending.pop_front();
+        }
+        state.current.clone()
+    }
 }
-fn emit_notification(app: &AppHandle, notification: GmailNotification, settings: &Settings) -> Result<()> {
-    info!("emit_notification: шаг 1 - начало для уведомления {}", notification.id);
+fn emit_notification(
+    app: &AppHandle,
+    notification: GmailNotification,
+    settings: &Settings,
+) -> Result<()> {
+    info!(
+        "emit_notification: шаг 1 - начало для уведомления {}",
+        notification.id
+    );
     match serde_json::to_string_pretty(&notification) {
         Ok(raw) => info!("emit_notification: payload JSON = {}", raw),
         Err(err) => warn!(%err, "emit_notification: failed to stringify notification payload"),

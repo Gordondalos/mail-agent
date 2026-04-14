@@ -92,7 +92,7 @@
         @if (isExpanded()) {
         <div class="alert-body" data-tauri-drag-region="false">
           @if (safeBody(); as body) {
-            <div class="alert-body__content" [innerHTML]="body"></div>
+            <div class="alert-body__content" [innerHTML]="body" (click)="onBodyClick($event)"></div>
           } @else {
             <p class="alert-body__empty">Содержимое письма недоступно</p>
             @if (display.snippet) {

@@ -5,6 +5,7 @@ mod gmail;
 mod notifier;
 mod oauth;
 
+use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -112,7 +113,10 @@ impl AppState {
             .await
         {
             Ok(messages) => {
-                info!("poll_once: Gmail вернул {count} писем", count = messages.len());
+                info!(
+                    "poll_once: Gmail вернул {count} писем",
+                    count = messages.len()
+                );
                 self.reset_auth_prompt();
                 let settings = self.settings.get();
                 for message in messages {
@@ -134,7 +138,10 @@ impl AppState {
                             self.prompt_auth_once(app, AUTH_REQUIRED_MESSAGE);
                         }
                         OAuthError::Misconfigured(reason) => {
-                            warn!(reason = reason.as_str(), "poll_once: OAuth настроен неверно");
+                            warn!(
+                                reason = reason.as_str(),
+                                "poll_once: OAuth настроен неверно"
+                            );
                             self.prompt_auth_once(app, reason.as_str());
                         }
                         _ => {}
@@ -323,6 +330,13 @@ async fn open_in_browser(
         .map(|_| ())
 }
 
+#[tauri::command]
+async fn open_external_url(url: String) -> Result<(), String> {
+    webbrowser::open(&url)
+        .map_err(|err| err.to_string())
+        .map(|_| ())
+}
+
 #[derive(serde::Serialize)]
 struct VoicePreset {
     id: String,
@@ -418,17 +432,32 @@ async fn mark_messages_read(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
     message_ids: Vec<String>,
+    keep_window_open: Option<bool>,
 ) -> Result<(), String> {
     if message_ids.is_empty() {
         return Ok(());
     }
-    let settings = state.settings.get();
+    let keep_window_open = keep_window_open.unwrap_or(false);
+    let mut unique_ids = Vec::new();
+    let mut read_set = HashSet::new();
     for id in message_ids {
-        state
-            .mark_read(&id)
-            .await
-            .map_err(|err| err.to_string())?;
+        if read_set.insert(id.clone()) {
+            unique_ids.push(id);
+        }
+    }
+
+    for id in &unique_ids {
+        state.mark_read(&id).await.map_err(|err| err.to_string())?;
         state.gmail.forget(&id);
+    }
+
+    if keep_window_open {
+        state.notifier.prune_read(&read_set);
+        return Ok(());
+    }
+
+    let settings = state.settings.get();
+    for id in unique_ids {
         let is_current = state
             .notifier
             .current()
@@ -485,7 +514,10 @@ async fn toggle_alert_window(
             let height = monitor.size().height;
             let x = monitor.position().x;
             let y = monitor.position().y;
-            info!("toggle_alert_window: fullscreen {}x{} pos ({},{})", width, height, x, y);
+            info!(
+                "toggle_alert_window: fullscreen {}x{} pos ({},{})",
+                width, height, x, y
+            );
             let _ = win.set_position(PhysicalPosition::new(x, y));
             let _ = win.set_size(PhysicalSize::new(width, height));
         } else {
@@ -549,7 +581,8 @@ async fn current_notification(
 }
 
 fn register_tray(app: &tauri::App) -> tauri::Result<()> {
-    let check_now_item = MenuItem::with_id(app, "check_now", "Проверить сейчас", true, None::<&str>)?;
+    let check_now_item =
+        MenuItem::with_id(app, "check_now", "Проверить сейчас", true, None::<&str>)?;
     let open_settings = MenuItem::with_id(
         app,
         "open_settings",
@@ -736,6 +769,7 @@ fn main() {
             check_now,
             mark_message_read,
             open_in_browser,
+            open_external_url,
             dismiss_notification,
             list_unread,
             mark_messages_read,

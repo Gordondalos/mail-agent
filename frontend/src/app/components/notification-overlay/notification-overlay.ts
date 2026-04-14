@@ -151,9 +151,10 @@ export class NotificationOverlay implements OnInit, OnDestroy {
     if (!target) return;
     const currentId = this.notification()?.id;
     const markCurrent = currentId === target.id;
+    const keepWindowOpen = this.isExpanded();
     try {
-      await this.ipc.invoke('mark_messages_read', { messageIds: [target.id] });
-      if (markCurrent) {
+      await this.ipc.invoke('mark_messages_read', { messageIds: [target.id], keepWindowOpen });
+      if (markCurrent && !keepWindowOpen) {
         this.notification.set(null);
         this.visible.set(false);
         this.isExpanded.set(false);
@@ -165,6 +166,12 @@ export class NotificationOverlay implements OnInit, OnDestroy {
       this.sidebarMessages.set(remaining);
       const nextSelection = remaining[0] ?? null;
       this.selectedPreview.set(nextSelection);
+      if (keepWindowOpen) {
+        await this.syncCurrentNotification();
+        if (!remaining.length) {
+          await this.loadUnreadList(true);
+        }
+      }
     } catch (error) {
       console.error('failed to mark read', error);
     }
@@ -331,6 +338,31 @@ export class NotificationOverlay implements OnInit, OnDestroy {
     }
   }
 
+  async onBodyClick(event: MouseEvent) {
+    const target = event.target as HTMLElement | null;
+    const anchor = target?.closest('a') as HTMLAnchorElement | null;
+    if (!anchor) {
+      return;
+    }
+    const href = anchor.getAttribute('href');
+    if (!href || href.startsWith('#') || href.startsWith('cid:')) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      await this.ipc.invoke('open_external_url', { url: href });
+      if (this.isExpanded()) {
+        await this.ipc.invoke('toggle_alert_window', { expanded: false });
+        this.isExpanded.set(false);
+        this.selectedPreview.set(null);
+        this.applyOpacity();
+      }
+    } catch (error) {
+      console.error('failed to open mail link in browser', error);
+    }
+  }
+
   selectSidebarMessage(message: NotificationPayload) {
     this.selectedPreview.set(message);
   }
@@ -343,7 +375,8 @@ export class NotificationOverlay implements OnInit, OnDestroy {
     this.sidebarBulkAction.set(true);
     this.sidebarError.set(null);
     try {
-      await this.ipc.invoke('mark_messages_read', { messageIds: ids });
+      await this.ipc.invoke('mark_messages_read', { messageIds: ids, keepWindowOpen: true });
+      await this.syncCurrentNotification();
       this.selectedPreview.set(null);
       await this.loadUnreadList(true);
     } catch (error) {
@@ -356,6 +389,21 @@ export class NotificationOverlay implements OnInit, OnDestroy {
 
   refreshUnreadList() {
     void this.loadUnreadList(true);
+  }
+
+  private async syncCurrentNotification(): Promise<void> {
+    try {
+      const current = await this.ipc.invoke<NotificationPayload | null>('current_notification');
+      if (current) {
+        this.notification.set(current);
+        this.visible.set(true);
+      } else if (!this.isExpanded()) {
+        this.notification.set(null);
+        this.visible.set(false);
+      }
+    } catch {
+      // ignore
+    }
   }
 
   private async loadUnreadList(force = false): Promise<void> {

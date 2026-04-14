@@ -155,7 +155,7 @@ impl OAuthController {
                 .await
                 .map_err(|err| OAuthError::Other(err.into()))?;
             let mut new_token = TokenSet::from_response(&response)?;
-            
+
             // If the new token doesn't have a refresh token, preserve the old one
             if new_token.refresh_token.is_none() {
                 new_token.refresh_token = Some(refresh);
