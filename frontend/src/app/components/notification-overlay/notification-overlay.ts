@@ -5,7 +5,7 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { Ipc } from '../../services/ipc';
 import { UnlistenFn } from '@tauri-apps/api/event';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { getCurrentWindow, LogicalSize, LogicalPosition } from '@tauri-apps/api/window';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 type NotificationPayload = {
   id: string;
@@ -20,6 +20,16 @@ type NotificationPayload = {
   url: string;
   body?: string | null;
 };
+
+type ResizeDirection =
+  | 'East'
+  | 'North'
+  | 'NorthEast'
+  | 'NorthWest'
+  | 'South'
+  | 'SouthEast'
+  | 'SouthWest'
+  | 'West';
 
 @Component({
   selector: 'app-notification-overlay',
@@ -41,17 +51,18 @@ export class NotificationOverlay implements OnInit, OnDestroy {
   sidebarBulkAction = signal<boolean>(false);
   selectedPreview = signal<NotificationPayload | null>(null);
   displayedMessage = computed<NotificationPayload | null>(() => this.selectedPreview() ?? this.notification());
-  canUsePrimaryActions = computed<boolean>(() => {
+  canUseOpenAction = computed<boolean>(() => {
     const selected = this.selectedPreview();
     const current = this.notification();
-    if (!selected) {
-      return true;
-    }
     if (!current) {
       return false;
     }
+    if (!selected) {
+      return true;
+    }
     return selected.id === current.id;
   });
+  canMarkReadAction = computed<boolean>(() => this.displayedMessage() !== null);
   safeBody = computed<SafeHtml | null>(() => {
     const n = this.displayedMessage();
     if (!this.isExpanded()) {
@@ -121,30 +132,39 @@ export class NotificationOverlay implements OnInit, OnDestroy {
   }
 
   async open() {
-    const n = this.notification();
-    if (!n) return;
+    const current = this.notification();
+    if (!current) return;
     this.notification.set(null);
     this.visible.set(false);
     this.isExpanded.set(false);
     this.selectedPreview.set(null);
     await this.hideWindow();
     try {
-      await this.ipc.invoke('open_in_browser', { url: n.url });
+      await this.ipc.invoke('open_in_browser', { url: current.url });
     } catch (error) {
       console.error('failed to open in browser', error);
     }
   }
 
   async markRead() {
-    const n = this.notification();
-    if (!n) return;
-    this.notification.set(null);
-    this.visible.set(false);
-    this.isExpanded.set(false);
-    this.selectedPreview.set(null);
-    await this.hideWindow();
+    const target = this.displayedMessage();
+    if (!target) return;
+    const currentId = this.notification()?.id;
+    const markCurrent = currentId === target.id;
     try {
-      await this.ipc.invoke('mark_message_read', { messageId: n.id });
+      await this.ipc.invoke('mark_messages_read', { messageIds: [target.id] });
+      if (markCurrent) {
+        this.notification.set(null);
+        this.visible.set(false);
+        this.isExpanded.set(false);
+        this.selectedPreview.set(null);
+        await this.hideWindow();
+        return;
+      }
+      const remaining = this.sidebarMessages().filter((item) => item.id !== target.id);
+      this.sidebarMessages.set(remaining);
+      const nextSelection = remaining[0] ?? null;
+      this.selectedPreview.set(nextSelection);
     } catch (error) {
       console.error('failed to mark read', error);
     }
@@ -282,6 +302,35 @@ export class NotificationOverlay implements OnInit, OnDestroy {
     }
   }
 
+  async startWindowDrag(event: MouseEvent) {
+    if (event.button !== 0) {
+      return;
+    }
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('button, a, input, textarea, select, [data-tauri-drag-region="false"]')) {
+      return;
+    }
+    event.preventDefault();
+    try {
+      await this.windowRef.startDragging();
+    } catch (error) {
+      console.debug('[overlay.drag] startDragging failed', error);
+    }
+  }
+
+  async startResizeDrag(event: MouseEvent, direction: ResizeDirection) {
+    if (event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      await this.windowRef.startResizeDragging(direction);
+    } catch (error) {
+      console.debug('[overlay.resize] startResizeDragging failed', { direction, error });
+    }
+  }
+
   selectSidebarMessage(message: NotificationPayload) {
     this.selectedPreview.set(message);
   }
@@ -294,7 +343,7 @@ export class NotificationOverlay implements OnInit, OnDestroy {
     this.sidebarBulkAction.set(true);
     this.sidebarError.set(null);
     try {
-      await this.ipc.invoke('mark_messages_read', { message_ids: ids });
+      await this.ipc.invoke('mark_messages_read', { messageIds: ids });
       this.selectedPreview.set(null);
       await this.loadUnreadList(true);
     } catch (error) {

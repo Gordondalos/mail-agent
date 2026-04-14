@@ -463,6 +463,7 @@
   position: absolute;
   top: -6px;
   right: -4px;
+  z-index: 4;
   cursor: pointer;
   border: none;
   background: rgba(255, 255, 255, 0.8);
@@ -486,6 +487,76 @@
     color: #fff;
     transform: scale(1.1);
   }
+}
+
+.resize-handle {
+  position: absolute;
+  z-index: 3;
+  -webkit-app-region: no-drag;
+}
+
+.resize-handle--north {
+  top: 0;
+  left: 10px;
+  right: 10px;
+  height: 8px;
+  cursor: n-resize;
+}
+
+.resize-handle--south {
+  bottom: 0;
+  left: 10px;
+  right: 10px;
+  height: 8px;
+  cursor: s-resize;
+}
+
+.resize-handle--east {
+  top: 10px;
+  right: 0;
+  bottom: 10px;
+  width: 8px;
+  cursor: e-resize;
+}
+
+.resize-handle--west {
+  top: 10px;
+  left: 0;
+  bottom: 10px;
+  width: 8px;
+  cursor: w-resize;
+}
+
+.resize-handle--north-east {
+  top: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  cursor: ne-resize;
+}
+
+.resize-handle--north-west {
+  top: 0;
+  left: 0;
+  width: 12px;
+  height: 12px;
+  cursor: nw-resize;
+}
+
+.resize-handle--south-east {
+  right: 0;
+  bottom: 0;
+  width: 12px;
+  height: 12px;
+  cursor: se-resize;
+}
+
+.resize-handle--south-west {
+  left: 0;
+  bottom: 0;
+  width: 12px;
+  height: 12px;
+  cursor: sw-resize;
 }
 
 .alert-empty {

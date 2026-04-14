@@ -57,7 +57,7 @@
 
     <div class="alert-content alert-main" data-tauri-drag-region="false">
       @if (displayedMessage(); as display) {
-        <div class="alert-title">
+        <div class="alert-title" data-tauri-drag-region="true" (mousedown)="startWindowDrag($event)">
           <span class="alert-title__text">{{ display.subject || '(без темы)' }}</span>
           @if (display.receivedAt; as received) {
           <span class="alert-date">
@@ -107,15 +107,57 @@
     </div>
 
     <div class="alert-actions" data-tauri-drag-region="false">
-      <button class="open" (click)="open()" [disabled]="!canUsePrimaryActions()">Перейти</button>
-      <button class="read" (click)="markRead()" [disabled]="!canUsePrimaryActions()">Прочитано</button>
+      <button class="open" (click)="open()" [disabled]="!canUseOpenAction()">Перейти</button>
+      <button class="read" (click)="markRead()" [disabled]="!canMarkReadAction()">Прочитано</button>
       <button class="snooze" (click)="snooze()">Отложить</button>
-      @if (isExpanded() && !canUsePrimaryActions()) {
+      @if (isExpanded() && !canUseOpenAction()) {
       <p class="alert-actions__hint">
-        Действия доступны только для активного уведомления
+        «Перейти» доступно только для активного уведомления
       </p>
       }
     </div>
+    @if (isExpanded()) {
+    <div
+      class="resize-handle resize-handle--north"
+      data-tauri-drag-region="false"
+      (mousedown)="startResizeDrag($event, 'North')"
+    ></div>
+    <div
+      class="resize-handle resize-handle--south"
+      data-tauri-drag-region="false"
+      (mousedown)="startResizeDrag($event, 'South')"
+    ></div>
+    <div
+      class="resize-handle resize-handle--east"
+      data-tauri-drag-region="false"
+      (mousedown)="startResizeDrag($event, 'East')"
+    ></div>
+    <div
+      class="resize-handle resize-handle--west"
+      data-tauri-drag-region="false"
+      (mousedown)="startResizeDrag($event, 'West')"
+    ></div>
+    <div
+      class="resize-handle resize-handle--north-east"
+      data-tauri-drag-region="false"
+      (mousedown)="startResizeDrag($event, 'NorthEast')"
+    ></div>
+    <div
+      class="resize-handle resize-handle--north-west"
+      data-tauri-drag-region="false"
+      (mousedown)="startResizeDrag($event, 'NorthWest')"
+    ></div>
+    <div
+      class="resize-handle resize-handle--south-east"
+      data-tauri-drag-region="false"
+      (mousedown)="startResizeDrag($event, 'SouthEast')"
+    ></div>
+    <div
+      class="resize-handle resize-handle--south-west"
+      data-tauri-drag-region="false"
+      (mousedown)="startResizeDrag($event, 'SouthWest')"
+    ></div>
+    }
   </div>
 </div>
 }
