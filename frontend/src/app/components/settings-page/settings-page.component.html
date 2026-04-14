@@ -68,15 +68,19 @@
                     <input matInput type="text" [(ngModel)]="model.sound_path" name="soundPath"
                         (ngModelChange)="onSoundPathInput($event)" />
                 </mat-form-field>
-                <mat-form-field appearance="outline" class="voice-select" *ngIf="voicePresets().length > 0">
+                @if (voicePresets().length > 0) {
+                <mat-form-field appearance="outline" class="voice-select">
                     <mat-label>Встроенная мелодия</mat-label>
                     <mat-select [value]="selectedVoicePreset()" (selectionChange)="onVoicePresetSelected($event)">
                         <mat-option [value]="null">Не выбрано</mat-option>
-                        <mat-option *ngFor="let preset of voicePresets()" [value]="preset.id">
+                        @for (preset of voicePresets(); track preset.id) {
+                        <mat-option [value]="preset.id">
                             {{ preset.label }}
                         </mat-option>
+                        }
                     </mat-select>
                 </mat-form-field>
+                }
             </div>
         </div>
 

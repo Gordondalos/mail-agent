@@ -282,10 +282,6 @@ export class NotificationOverlay implements OnInit, OnDestroy {
     }
   }
 
-  trackByMessage(_index: number, item: NotificationPayload): string {
-    return item.id;
-  }
-
   selectSidebarMessage(message: NotificationPayload) {
     this.selectedPreview.set(message);
   }
