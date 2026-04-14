@@ -90,11 +90,30 @@ export class NotificationOverlay implements OnInit, OnDestroy {
       console.debug('[gmail notification]', JSON.stringify(n, null, 2));
       console.debug('[gmail notification body length]', n?.body?.length ?? 0);
       console.debug('[gmail notification snippet length]', n?.snippet?.length ?? 0);
-       this.selectedPreview.set(null);
-       this.isExpanded.set(false);
-       this.notification.set(n);
-       this.visible.set(true);
-       await this.playSound();
+      const wasExpanded = this.isExpanded();
+      const previousSelection = this.selectedPreview();
+
+      this.notification.set(n);
+      this.visible.set(true);
+
+      if (wasExpanded) {
+        // Не сворачиваем окно, если пользователь работает с expanded-режимом.
+        if (!previousSelection) {
+          this.selectedPreview.set(n);
+        }
+        this.isExpanded.set(true);
+        try {
+          await this.ipc.invoke('toggle_alert_window', { expanded: true });
+        } catch (error) {
+          console.debug('[overlay.notification] keep expanded failed', error);
+        }
+        void this.loadUnreadList(true);
+      } else {
+        this.selectedPreview.set(null);
+        this.isExpanded.set(false);
+      }
+
+      await this.playSound();
     }));
     this.unlistenFns.push(await this.ipc.on('gmail://settings', (s: any) => {
       this.settings = s;
