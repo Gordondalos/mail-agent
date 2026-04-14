@@ -9,25 +9,32 @@
 1) Подготовьте OAuth2 в Google (один раз):
 - Создайте OAuth Client ID типа Desktop App (см. раздел «Подготовка OAuth2» ниже). Для Desktop App не нужно вручную добавлять redirect URI — приложение само слушает `http://localhost:42813/oauth2callback`.
 
-2) Установите зависимости для вашей ОС:
-- Windows: запустите PowerShell-скрипт `scripts\setup.ps1 -Auto` (или поставьте всё вручную — см. раздел ниже).
-- macOS: выполните команды из раздела «Установка зависимостей (macOS)».
-- Linux: запустите `bash scripts/setup.sh --auto` (или поставьте всё вручную — см. раздел ниже).
+2) Установите системные зависимости для вашей ОС:
+- Windows: `npm run install:windows`
+- macOS: `npm run install:macos`
+- Linux: `npm run install:linux`
 
-3) Запуск в dev-режиме:
-- В корне проекта выполните `npm run start` — поднимутся одновременно Angular dev‑сервер (порт 4200) и `cargo tauri dev`.
+3) Установите JavaScript-зависимости проекта:
 
-4) Первая настройка в приложении:
+```bash
+npm install
+npm --prefix frontend install
+```
+
+4) Запуск в dev-режиме:
+- В корне проекта выполните `npm run start` (алиас `npm run dev`) — поднимутся Angular dev‑сервер (порт 4200) и `cargo tauri dev`.
+
+5) Первая настройка в приложении:
 - В основном окне откройте «Настройки» и вставьте ваши `Client ID` и (опционально) `Client Secret`.
 - При первом входе нажмите «Войти в Gmail» — откроется браузер с OAuth2.
 - При желании укажите интервал опроса, путь к звуку, громкость, автозапуск и Gmail-запрос (по умолчанию: `is:unread category:primary`).
 
-5) Использование:
+6) Использование:
 - При новых письмах появится полупрозрачный алерт 800×150 (не автоскрывается) с кнопками:
   - «Перейти» — открыть письмо в браузере;
   - «Прочитано» — снять метку `UNREAD` с письма.
 
-Если нужны installers/дистрибутив — соберите релиз командой `npm run build` (см. раздел «Сборка и запуск»).
+Если нужны installers/дистрибутив — используйте `npm run release` (алиас: `npm run build`).
 
 ## Возможности
 
@@ -207,7 +214,7 @@ cargo install tauri-cli  # или: npm i -g @tauri-apps/cli
 ```
 
 2) Примечания (macOS)
-- Если при сборке падают нативные зависимости, обновите CLT: `xcode-select --install`.
+- Если при сборке падают нативные зависимости, об��овите CLT: `xcode-select --install`.
 - На macOS используется WebView (входит в систему), дополнительных WebKitGTK пакетов не требуется.
 - После установки rustup выполните `source "$HOME/.cargo/env"` в текущей сессии или перезапустите терминал.
 
@@ -289,46 +296,77 @@ cargo install tauri-cli  # или: npm i -g @tauri-apps/cli
 
 ## Сборка и запуск
 
-Коротко:
-- Windows (одной командой): `pwsh -File .\scripts\setup.ps1 -Auto -Dev` для запуска в dev-режиме, или `-Auto -Build` для сборки установщика.
-- Linux (одной командой): `bash scripts/setup.sh --auto --dev` для dev, или `--auto --build` для сборки.
-- macOS: установите зависимости согласно документации Tauri, затем из каталога `src-tauri` выполните `cargo tauri dev` или `cargo tauri build`.
-
-После сборки релиза скрипты автоматически копируют артефакты в папку `release` в корне репозитория, чтобы было удобно найти всё, что нужно для распространения.
-
-Пошагово вручную:
-1. Установите зависимости Tauri согласно [официальной документации](https://tauri.app/v1/guides/getting-started/prerequisites/) или используйте скрипт `scripts/setup.ps1` на Windows / `scripts/setup.sh` на Linux.
-2. Установите `@tauri-apps/cli` (глобально через cargo или npm).
-3. В корне проекта запустите:
+### Быстрый сценарий через npm run
 
 ```bash
-cd src-tauri
-cargo tauri dev
+npm run install:windows   # Windows
+npm run install:linux     # Linux
+npm run install:macos     # macOS
+npm install
+npm --prefix frontend install
+npm run start
 ```
 
-Или для сборки релиза:
+Для релизной пересборки после правок:
 
 ```bash
-cargo tauri build
+npm run release
 ```
 
-Фронтенд — статический, дополнительных сборок не требуется (используется `frontend/` как dev/dist каталог).
+### Что значит "установка" в этом проекте
 
-### Где найти бинарники/установщики после сборки
-После `cargo tauri build`:
-- Скопированные артефакты лежат в папке `release/` в корне проекта (скрипты сохраняют туда EXE/MSI/NSIS на Windows, AppImage/DEB/RPM на Linux, DMG/APP на macOS). 
-- Также оригинальные файлы находятся в стандартных путях Tauri:
-  - Windows:
-    - Портативный бинарник: `src-tauri\target\release\gmail_tray_notifier.exe`
-    - Установщик MSI/NSIS: `src-tauri\target\release\bundle\` (подпапки `msi` или `nsis`)
-  - Linux:
-    - Портативный бинарник: `src-tauri/target/release/gmail_tray_notifier`
-    - Пакеты: `src-tauri/target/release/bundle/` (подпапки `deb`, `appimage`, `rpm` и т.п. — зависит от дистрибутива)
-  - macOS:
-    - Приложение: `src-tauri/target/release/bundle/macos/*.app`
-    - DMG: `src-tauri/target/release/bundle/dmg/*.dmg`
+Под "установкой" здесь имеются в виду **два отдельных шага**:
 
-> Примечание: точные имена файлов могут отличаться в зависимости от настроек `package.productName` и системных таргетов.
+1. Системные зависимости (Rust, WebView2/GTK, Tauri prerequisites):
+- Windows: `npm run install:windows`
+- Linux: `npm run install:linux`
+- macOS: `npm run install:macos` (или ручные команды из раздела выше)
+
+2. npm-зависимости репозитория:
+
+```bash
+npm install
+npm --prefix frontend install
+```
+
+Без обоих шагов сборка может не стартовать.
+
+### Где build, где release
+
+- `npm run dev` / `npm run start` — режим разработки (Angular + `cargo tauri dev`)
+- `npm run build:frontend` — только production-сборка фронтенда
+- `npm run release` — полная релизная сборка (frontend + Tauri + копирование артефактов в `release/`)
+- `npm run build` — алиас на `npm run release` для совместимости
+- `npm run build:windows` / `npm run build:linux` — платформенные обертки с проверкой ОС
+- `npm run rebuild` — только пересборка Rust-части без упаковки installer
+
+### Таблица npm-скриптов (что делает каждый)
+
+| Скрипт | Что делает | Когда запускать | ОС / ограничения | Результат |
+|---|---|---|---|---|
+| `npm run install:windows` | Запускает `scripts/setup.ps1 -Auto`, проверяет/ставит системные зависимости для Tauri | Первый запуск на Windows или при проблемах с окружением | Только Windows | Подготовленное окружение (Rust, Node, WebView2, Tauri CLI и т.д.) |
+| `npm run install:linux` | Запускает `scripts/setup.sh --auto`, ставит зависимости Tauri и инструменты | Первый запуск на Linux | Linux | Подготовленное окружение для dev/build |
+| `npm run install:macos` | Ставит базовые зависимости через brew/rustup + Tauri CLI | Первый запуск на macOS | macOS | Подготовленное окружение для dev/build |
+| `npm run dev` | Стартует `scripts/dev.js` (Angular dev server + `cargo tauri dev`) | Ежедневная разработка | Кроссплатформенно | Приложение в dev-режиме |
+| `npm run start` | Алиас на `npm run dev` | То же, что `dev` | Кроссплатформенно | То же, что `dev` |
+| `npm run build:frontend` | Делает только production build фронтенда (`frontend`) | Если нужно проверить только веб-часть | Кроссплатформенно | Production-ассеты фронтенда |
+| `npm run build:release` | Полный pipeline релиза через `scripts/build.js` | Основная команда релизной пересборки | Кроссплатформенно | Артефакты Tauri + копия в `release/` |
+| `npm run release` | Алиас на `npm run build:release` | Рекомендуемая команда релиза | Кроссплатформенно | То же, что `build:release` |
+| `npm run build` | Алиас на `npm run build:release` (обратная совместимость) | Если привыкли к `build` | Кроссплатформенно | То же, что `release` |
+| `npm run build:windows` | Проверяет, что ОС Windows, затем запускает `build:release` | Когда хотите явно «только Windows сборка» | Только Windows | Релизная сборка Windows |
+| `npm run build:linux` | Проверяет, что ОС Linux, затем запускает `build:release` | Когда хотите явно «только Linux сборка» | Linux (не Windows) | Релизная сборка Linux |
+| `npm run rebuild:rust` | `cargo build` для `src-tauri/Cargo.toml` | Быстро пересобрать Rust ядро без упаковки | Кроссплатформенно | Новый debug build Rust |
+| `npm run rebuild` | Алиас на `npm run rebuild:rust` | Короткая команда для Rust пересборки | Кроссплатформенно | То же, что `rebuild:rust` |
+| `npm run debug` | Запускает отладочный скрипт `scripts/debug.js` | Для диагностики | Зависит от скрипта | Отладочная информация |
+| `npm run run:debug:windows` | Запускает debug exe из `src-tauri/target/debug` | Быстрый запуск уже собранного debug бинарника | Только Windows | Запущен `gmail_tray_notifier.exe` |
+| `npm run run:dev` | Алиас на `run:debug:windows` | То же, что выше | Только Windows | То же, что `run:debug:windows` |
+
+### Частый вопрос: build vs build:windows vs release vs rebuild
+
+- `build` и `release` — в этом проекте это одно и то же (оба ведут в полный релизный pipeline).
+- `build:windows` — тот же релизный pipeline, но с проверкой, что вы действительно на Windows.
+- `rebuild` — **не релиз**: только `cargo build` (пересборка Rust), без упаковки установщика и без копирования в `release/`.
+- `install:windows` — это не сборка приложения, а подготовка окружения (установка зависимостей для сборки/запуска).
 
 ## Горячие клавиши и меню трея
 

@@ -2,28 +2,28 @@ import { Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
-import { TauriDragWindowDirective } from '../tauri-drag-window.directive';
 import { Ipc } from '../../services/ipc';
 import { UnlistenFn } from '@tauri-apps/api/event';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { getCurrentWindow, LogicalSize, LogicalPosition, PhysicalPosition } from '@tauri-apps/api/window';
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { getCurrentWindow, LogicalSize, LogicalPosition } from '@tauri-apps/api/window';
 
 type NotificationPayload = {
   id: string;
-  thread_id: string;
+  thread_id?: string;
+  threadId?: string;
   subject: string;
   snippet?: string | null;
   sender?: string | null;
   recipient?: string | null;
   receivedAt?: string | null;
+  received_at?: string | null;
   url: string;
   body?: string | null;
 };
 
 @Component({
   selector: 'app-notification-overlay',
-  imports: [CommonModule, MatIconModule, TauriDragWindowDirective, TauriDragWindowDirective],
+  imports: [CommonModule, MatIconModule],
   templateUrl: './notification-overlay.component.html',
   styleUrls: ['./notification-overlay.component.scss'],
 })
@@ -35,18 +35,40 @@ export class NotificationOverlay implements OnInit, OnDestroy {
   unlistenFns: UnlistenFn[] = [];
   private dateFormatter: Intl.DateTimeFormat | null = null;
   isExpanded = signal<boolean>(false);
+  sidebarMessages = signal<NotificationPayload[]>([]);
+  sidebarLoading = signal<boolean>(false);
+  sidebarError = signal<string | null>(null);
+  sidebarBulkAction = signal<boolean>(false);
+  selectedPreview = signal<NotificationPayload | null>(null);
+  displayedMessage = computed<NotificationPayload | null>(() => this.selectedPreview() ?? this.notification());
+  canUsePrimaryActions = computed<boolean>(() => {
+    const selected = this.selectedPreview();
+    const current = this.notification();
+    if (!selected) {
+      return true;
+    }
+    if (!current) {
+      return false;
+    }
+    return selected.id === current.id;
+  });
+  bodyLength = computed<number>(() => this.displayedMessage()?.body?.length ?? 0);
+  debugPayload = computed<string>(() => {
+    const message = this.displayedMessage();
+    return message ? JSON.stringify(message, null, 2) : 'null';
+  });
   safeBody = computed<SafeHtml | null>(() => {
-    const n = this.current();
-    const expanded = this.isExpanded(); // Явная зависимость от isExpanded
-    console.log('safeBody computed: current=', n ? 'exists' : 'null', 'isExpanded=', expanded, 'hasBody=', !!n?.body);
-    if (!n?.body) {
-      console.log('safeBody: no body found');
+    const n = this.displayedMessage();
+    if (!this.isExpanded()) {
       return null;
     }
-    console.log('safeBody: body length=', n.body.length, 'first 100 chars=', n.body.substring(0, 100));
-    return this.sanitizer.bypassSecurityTrustHtml(n.body);
+    const prepared = this.prepareBodyHtml(n?.body ?? n?.snippet ?? null);
+    if (!prepared) {
+      return null;
+    }
+    return this.sanitizer.bypassSecurityTrustHtml(prepared);
   });
-
+  private readonly windowRef = getCurrentWindow();
   constructor(
     private readonly ipc: Ipc,
     private readonly sanitizer: DomSanitizer
@@ -60,9 +82,13 @@ export class NotificationOverlay implements OnInit, OnDestroy {
 
     this.unlistenFns.push(await this.ipc.on('gmail://notification', async (n: NotificationPayload) => {
       console.debug('[gmail notification]', JSON.stringify(n, null, 2));
-      this.notification.set(n);
-      this.visible.set(true);
-      await this.playSound();
+      console.debug('[gmail notification body length]', n?.body?.length ?? 0);
+      console.debug('[gmail notification snippet length]', n?.snippet?.length ?? 0);
+       this.selectedPreview.set(null);
+       this.isExpanded.set(false);
+       this.notification.set(n);
+       this.visible.set(true);
+       await this.playSound();
     }));
     this.unlistenFns.push(await this.ipc.on('gmail://settings', (s: any) => {
       this.settings = s;
@@ -78,7 +104,10 @@ export class NotificationOverlay implements OnInit, OnDestroy {
         appRoot.style.backgroundColor = 'rgba(255, 255, 255, 1)';
       });
       appRoot.addEventListener('mouseleave', () => {
-        this.applyOpacity();
+        // В expanded-режиме не делаем прозрачным
+        if (!this.isExpanded()) {
+          this.applyOpacity();
+        }
       });
     }
   }
@@ -99,9 +128,10 @@ export class NotificationOverlay implements OnInit, OnDestroy {
   async open() {
     const n = this.notification();
     if (!n) return;
-    console.log('notification', n);
     this.notification.set(null);
     this.visible.set(false);
+    this.isExpanded.set(false);
+    this.selectedPreview.set(null);
     await this.hideWindow();
     try {
       await this.ipc.invoke('open_in_browser', { url: n.url });
@@ -113,9 +143,10 @@ export class NotificationOverlay implements OnInit, OnDestroy {
   async markRead() {
     const n = this.notification();
     if (!n) return;
-    console.log('notification', n);
     this.notification.set(null);
     this.visible.set(false);
+    this.isExpanded.set(false);
+    this.selectedPreview.set(null);
     await this.hideWindow();
     try {
       await this.ipc.invoke('mark_message_read', { messageId: n.id });
@@ -128,6 +159,8 @@ export class NotificationOverlay implements OnInit, OnDestroy {
     const n = this.notification();
     this.notification.set(null);
     this.visible.set(false);
+    this.isExpanded.set(false);
+    this.selectedPreview.set(null);
     await this.hideWindow();
     if (n?.id) {
       await this.ipc.invoke('dismiss_notification', { messageId: n.id });
@@ -139,6 +172,8 @@ export class NotificationOverlay implements OnInit, OnDestroy {
   async snooze() {
     this.notification.set(null);
     this.visible.set(false);
+    this.isExpanded.set(false);
+    this.selectedPreview.set(null);
     await this.hideWindow();
     try {
       await this.ipc.invoke('snooze');
@@ -197,7 +232,7 @@ export class NotificationOverlay implements OnInit, OnDestroy {
 
   private async hideWindow() {
     try {
-      await getCurrentWindow().hide();
+      await this.windowRef.hide();
     } catch {
       // ignore
     }
@@ -227,86 +262,150 @@ export class NotificationOverlay implements OnInit, OnDestroy {
     return textarea.value;
   }
 
-  getSafeBody(body: string | null | undefined): SafeHtml {
-    console.log('getSafeBody called with body length=', body?.length || 0);
-    if (!body) {
-      return '';
+  async toggleExpand(event?: Event) {
+    event?.preventDefault();
+    event?.stopPropagation();
+
+    const nextExpanded = !this.isExpanded();
+    try {
+      await this.ipc.invoke('toggle_alert_window', { expanded: nextExpanded });
+      this.isExpanded.set(nextExpanded);
+      // В expanded — белый фон без прозрачности, в collapsed — вернуть opacity
+      const appRoot = document.querySelector('app-root') as HTMLElement;
+      if (appRoot) {
+        appRoot.style.backgroundColor = nextExpanded
+          ? 'rgba(255, 255, 255, 1)'
+          : `rgba(255, 255, 255, ${this.settings?.notification_opacity ?? 0.95})`;
+      }
+      if (nextExpanded) {
+        void this.loadUnreadList(true);
+      } else {
+        this.selectedPreview.set(null);
+      }
+    } catch (error) {
+      console.error('[overlay.toggleExpand] toggle_alert_window failed', error);
     }
-    return this.sanitizer.bypassSecurityTrustHtml(body);
   }
 
-  async toggleExpand() {
-    const tauriWindow: WebviewWindow | any = getCurrentWindow();
-    const isCurrentlyExpanded = this.isExpanded();
-    console.log('toggleExpand: current state=', isCurrentlyExpanded, 'notification=', this.notification());
+  trackByMessage(_index: number, item: NotificationPayload): string {
+    return item.id;
+  }
 
-    if (!isCurrentlyExpanded) {
-      console.log('toggleExpand: expanding window');
-      // Разворачиваем окно до размеров из настроек или на весь экран
-      let expandedWidth = this.settings?.notification_expanded_width;
-      let expandedHeight = this.settings?.notification_expanded_height;
+  selectSidebarMessage(message: NotificationPayload) {
+    this.selectedPreview.set(message);
+  }
 
-      // Если размеры не заданы в настройках, используем размер экрана
-      if (!expandedWidth || !expandedHeight || expandedWidth === 0 || expandedHeight === 0) {
-        try {
-          const monitor = await tauriWindow.currentMonitor();
-          if (monitor) {
-            expandedWidth = monitor.size.width;
-            expandedHeight = monitor.size.height;
-            // Позиционируем окно на весь экран
-            await tauriWindow.setPosition(new PhysicalPosition(monitor.position.x, monitor.position.y));
-          } else {
-            // Fallback размеры, если монитор не определен
-            expandedWidth = 1200;
-            expandedHeight = 800;
-          }
-        } catch (error) {
-          console.error('Failed to get monitor info', error);
-          expandedWidth = 1200;
-          expandedHeight = 800;
-        }
-      }
-
-      await tauriWindow.setSize(new LogicalSize(expandedWidth, expandedHeight));
-
-      // Центрируем окно, если это не полноэкранный режим
-      if (expandedWidth < 1900) {
-        try {
-          const monitor = await tauriWindow.currentMonitor();
-          if (monitor) {
-            const x = monitor.position.x + (monitor.size.width - expandedWidth) / 2;
-            const y = monitor.position.y + (monitor.size.height - expandedHeight) / 2;
-            await tauriWindow.setPosition(new LogicalPosition(Math.max(0, x), Math.max(0, y)));
-          }
-        } catch (error) {
-          console.error('Failed to center window', error);
-        }
-      }
-
-      this.isExpanded.set(true);
-      console.log('toggleExpand: window expanded, isExpanded=', this.isExpanded());
-    } else {
-      console.log('toggleExpand: collapsing window');
-      // Сворачиваем окно обратно
-      const normalWidth = this.settings?.notification_width ?? 650;
-      const normalHeight = this.settings?.notification_height ?? 150;
-      await tauriWindow.setSize(new LogicalSize(normalWidth, normalHeight));
-
-      // Возвращаем окно в правый нижний угол
-      try {
-        const monitor = await tauriWindow.currentMonitor();
-        if (monitor) {
-          const margin = 64;
-          const x = monitor.position.x + monitor.size.width - normalWidth - margin;
-          const y = monitor.position.y + monitor.size.height - normalHeight - margin;
-          await tauriWindow.setPosition(new LogicalPosition(Math.max(monitor.position.x, x), Math.max(monitor.position.y, y)));
-        }
-      } catch (error) {
-        console.error('Failed to reposition window', error);
-      }
-
-      this.isExpanded.set(false);
-      console.log('toggleExpand: window collapsed, isExpanded=', this.isExpanded());
+  async markAllSidebarMessagesRead() {
+    const ids = this.sidebarMessages().map((item) => item.id);
+    if (!ids.length || this.sidebarBulkAction()) {
+      return;
     }
+    this.sidebarBulkAction.set(true);
+    this.sidebarError.set(null);
+    try {
+      await this.ipc.invoke('mark_messages_read', { message_ids: ids });
+      this.selectedPreview.set(null);
+      await this.loadUnreadList(true);
+    } catch (error) {
+      console.error('failed to mark messages read', error);
+      this.sidebarError.set('Не удалось пометить письма прочитанными');
+    } finally {
+      this.sidebarBulkAction.set(false);
+    }
+  }
+
+  refreshUnreadList() {
+    void this.loadUnreadList(true);
+  }
+
+  private async loadUnreadList(force = false): Promise<void> {
+    console.debug('[sidebar.load] request', {
+      force,
+      expanded: this.isExpanded(),
+      loading: this.sidebarLoading(),
+      existing: this.sidebarMessages().length,
+    });
+     if (this.sidebarLoading()) {
+      console.debug('[sidebar.load] skip: already loading');
+      return;
+    }
+    if (!force && this.sidebarMessages().length) {
+      console.debug('[sidebar.load] skip: cached list used');
+      return;
+    }
+    this.sidebarLoading.set(true);
+    this.sidebarError.set(null);
+    try {
+      const items = await this.ipc.invoke<NotificationPayload[]>('list_unread', { limit: 10 });
+      console.debug('[sidebar.load] response', {
+        count: items.length,
+        items: items.map((item) => ({
+          id: item.id,
+          subject: item.subject,
+          bodyLength: item.body?.length ?? 0,
+          snippetLength: item.snippet?.length ?? 0,
+        })),
+      });
+       this.sidebarMessages.set(items);
+      if (this.isExpanded()) {
+        const currentSelection = this.selectedPreview();
+        if (!currentSelection || !items.some((item) => item.id === currentSelection.id)) {
+          const currentNotification = this.notification();
+          const replacement =
+            items.find((item) => (currentNotification ? item.id === currentNotification.id : false)) ??
+            items[0] ??
+            null;
+          this.selectedPreview.set(replacement);
+        }
+      }
+    } catch (error) {
+      console.error('failed to load unread list', error);
+      this.sidebarError.set('Не удалось загрузить письма');
+    } finally {
+      this.sidebarLoading.set(false);
+      console.debug('[sidebar.load] done', {
+        loading: this.sidebarLoading(),
+        count: this.sidebarMessages().length,
+        error: this.sidebarError(),
+      });
+    }
+  }
+
+  private prepareBodyHtml(body: string | null): string | null {
+    if (!body) {
+      return null;
+    }
+    const normalized = this.normalizeEmailHtml(body);
+    // Для plain text не используем сырой innerHTML: сохраняем переносы строк.
+    if (!this.looksLikeHtml(normalized)) {
+      return `<pre class="mail-plain">${this.escapeHtml(normalized)}</pre>`;
+    }
+    return normalized;
+  }
+
+  private normalizeEmailHtml(value: string): string {
+    if (!/^\s*<(?:!doctype\s+html|html|body)\b/i.test(value)) {
+      return value;
+    }
+
+    try {
+      const doc = new DOMParser().parseFromString(value, 'text/html');
+      return doc.body?.innerHTML?.trim() || value;
+    } catch {
+      return value;
+    }
+  }
+
+  private looksLikeHtml(value: string): boolean {
+    return /<\/?[a-z][\s\S]*>/i.test(value);
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 }

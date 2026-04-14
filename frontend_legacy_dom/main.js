@@ -1,7 +1,7 @@
 const { tauri, event, window: tauriWindow } = window.__TAURI__;
 const { invoke, convertFileSrc } = tauri;
 const { listen } = event;
-const { appWindow } = tauriWindow;
+const { appWindow, LogicalSize, LogicalPosition } = tauriWindow;
 
 const params = new URLSearchParams(window.location.search);
 const view = params.get('view');
@@ -457,3 +457,4 @@ async function initAlert() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+

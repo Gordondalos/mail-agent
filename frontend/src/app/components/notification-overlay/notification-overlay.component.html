@@ -1,11 +1,9 @@
 <div
   class="alert-shell"
-  appTauriDragWindow
-  data-tauri-drag-region
-  *ngIf="current() as n"
-  (dblclick)="toggleExpand()"
+  [class.alert-shell--expanded]="isExpanded()"
+  *ngIf="current()"
 >
-  <div class="alert-card">
+  <div class="alert-card" [class.alert-card--expanded]="isExpanded()">
     <button
       class="alert-close"
       type="button"
@@ -15,37 +13,101 @@
     >
       <mat-icon>close</mat-icon>
     </button>
-    <div class="alert-content" data-tauri-drag-region="false">
 
-      <div class="alert-title">
-        {{ n.subject || '(без темы)' }}
-        <span class="alert-date" *ngIf="n.receivedAt as received">
-          {{ formatDate(received) }}
-        </span>
-        <span class="alert-hint" *ngIf="!isExpanded()" title="Двойной клик для развертывания">⤢</span>
+    <div class="alert-sidebar" *ngIf="isExpanded()" data-tauri-drag-region="false">
+      <div class="sidebar-header">
+        <h3>Непрочитанные</h3>
+        <button class="sidebar-refresh" type="button" (click)="refreshUnreadList()" [disabled]="sidebarLoading()">
+          <mat-icon>refresh</mat-icon>
+        </button>
       </div>
-      <div class="alert-sender" *ngIf="n.sender">
-        <strong>От:</strong> {{ decodeHtmlEntities(n.sender) }}
-      </div>
-      <div class="alert-recipient" *ngIf="n.recipient">
-        <strong>Кому:</strong> {{ decodeHtmlEntities(n.recipient) }}
-      </div>
-      <div class="alert-snippet" *ngIf="!isExpanded()">{{ n.snippet || '' }}</div>
-
-      <!-- Развёрнутое содержимое письма -->
-      <div class="alert-body" *ngIf="isExpanded()">
-        <!-- Debug info -->
-        <div style="background: #f0f0f0; padding: 8px; margin-bottom: 8px; font-size: 0.8em; border: 1px solid #ccc;">
-          <strong>Debug:</strong> isExpanded={{ isExpanded() }}, hasBody={{ !!n.body }}, bodyLength={{ n.body?.length || 0 }}
-        </div>
-        <div *ngIf="n.body" [innerHTML]="getSafeBody(n.body)"></div>
-        <p *ngIf="!n.body" style="color: #94a3b8; font-style: italic;">Содержимое письма недоступно</p>
-      </div>
+      <p class="sidebar-status" *ngIf="sidebarLoading()">Загрузка...</p>
+      <p class="sidebar-status sidebar-status--error" *ngIf="sidebarError()">{{ sidebarError() }}</p>
+      <button
+        class="sidebar-action"
+        type="button"
+        (click)="markAllSidebarMessagesRead()"
+        [disabled]="sidebarBulkAction() || !sidebarMessages().length"
+      >
+        Прочитать все
+      </button>
+      <ul class="sidebar-list" *ngIf="sidebarMessages().length; else sidebarEmpty">
+        <li
+          class="sidebar-item"
+          *ngFor="let item of sidebarMessages(); trackBy: trackByMessage"
+          (click)="selectSidebarMessage(item)"
+          [class.active]="selectedPreview()?.id === item.id"
+        >
+          <div class="sidebar-item__date">{{ item.receivedAt ? formatDate(item.receivedAt) : '' }}</div>
+          <div class="sidebar-item__title">{{ decodeHtmlEntities(item.subject || '(без темы)') }}</div>
+          <div class="sidebar-item__sender">
+            {{ decodeHtmlEntities(item.sender || 'Gmail') }}
+          </div>
+        </li>
+      </ul>
+      <ng-template #sidebarEmpty>
+        <p class="sidebar-status">Нет непрочитанных писем</p>
+      </ng-template>
     </div>
+
+    <div class="alert-content alert-main" data-tauri-drag-region="false">
+      <ng-container *ngIf="displayedMessage() as display; else noSelection">
+        <div class="alert-title">
+          <span class="alert-title__text">{{ display.subject || '(без темы)' }}</span>
+          <span class="alert-date" *ngIf="display.receivedAt as received">
+            {{ formatDate(received) }}
+          </span>
+          <button
+            class="alert-toggle"
+            type="button"
+            data-tauri-drag-region="false"
+            (click)="toggleExpand($event)"
+            [attr.aria-pressed]="isExpanded()"
+            [attr.aria-label]="isExpanded() ? 'Свернуть уведомление' : 'Развернуть уведомление'"
+          >
+            <mat-icon *ngIf="!isExpanded()">open_in_full</mat-icon>
+            <mat-icon *ngIf="isExpanded()">close_fullscreen</mat-icon>
+          </button>
+        </div>
+        <div class="alert-sender" *ngIf="display.sender">
+          <strong>От:</strong> {{ decodeHtmlEntities(display.sender) }}
+        </div>
+        <div class="alert-recipient" *ngIf="display.recipient">
+          <strong>Кому:</strong> {{ decodeHtmlEntities(display.recipient) }}
+        </div>
+        <div class="alert-snippet" *ngIf="!isExpanded()">{{ display.snippet || '' }}</div>
+
+        <div class="alert-body" *ngIf="isExpanded()" data-tauri-drag-region="false">
+          <div class="alert-debug-meta">
+            body length: {{ bodyLength() }}
+          </div>
+          <ng-container *ngIf="safeBody() as body; else noBody">
+            <div class="alert-body__content" [innerHTML]="body"></div>
+          </ng-container>
+          <ng-template #noBody>
+            <p class="alert-body__empty">Содержимое письма недоступно</p>
+            <p class="alert-body__empty" *ngIf="display.snippet">Есть только snippet: {{ display.snippet }}</p>
+          </ng-template>
+        </div>
+
+        <details class="alert-debug" *ngIf="isExpanded()">
+          <summary>Debug payload (JSON)</summary>
+          <pre>{{ debugPayload() }}</pre>
+        </details>
+      </ng-container>
+      <ng-template #noSelection>
+        <div class="alert-empty">Выберите письмо слева, чтобы просмотреть содержимое.</div>
+      </ng-template>
+    </div>
+
     <div class="alert-actions" data-tauri-drag-region="false">
-      <button class="open" (click)="open()">Перейти</button>
-      <button class="read" (click)="markRead()">Прочитано</button>
+      <button class="open" (click)="open()" [disabled]="!canUsePrimaryActions()">Перейти</button>
+      <button class="read" (click)="markRead()" [disabled]="!canUsePrimaryActions()">Прочитано</button>
       <button class="snooze" (click)="snooze()">Отложить</button>
+      <p class="alert-actions__hint" *ngIf="isExpanded() && !canUsePrimaryActions()">
+        Действия доступны только для активного уведомления
+      </p>
+      <p class="alert-actions__hint">expanded: {{ isExpanded() }}</p>
     </div>
   </div>
 </div>

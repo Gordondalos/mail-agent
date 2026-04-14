@@ -6,13 +6,19 @@
     "install:windows": "powershell -File .\\scripts\\setup.ps1 -Auto",
     "install:macos": "xcode-select --install && brew install node && curl https://sh.rustup.rs -sSf | sh -s -- -y && source \"$HOME/.cargo/env\" && cargo install tauri-cli",
     "install:linux": "bash scripts/setup.sh --auto",
-    "start": "node scripts/dev.js",
-    "build": "node scripts/build.js",
-    "build:windows": "node -e \"if(process.platform!=='win32'){console.error('This script must be run on Windows');process.exit(1)}\" && npm run build",
-    "build:linux": "node -e \"if(process.platform==='win32'){console.error('This script must be run on Linux');process.exit(1)}\" && npm run build",
+    "dev": "node scripts/dev.js",
+    "start": "npm run dev",
+    "build:frontend": "npm --prefix frontend run build -- --configuration production",
+    "build:release": "node scripts/build.js",
+    "release": "npm run build:release",
+    "build": "npm run build:release",
+    "build:windows": "node -e \"if(process.platform!=='win32'){console.error('This script must be run on Windows');process.exit(1)}\" && npm run build:release",
+    "build:linux": "node -e \"if(process.platform==='win32'){console.error('This script must be run on Linux');process.exit(1)}\" && npm run build:release",
     "debug": "node scripts/debug.js",
-    "rebuild": "cargo build --manifest-path src-tauri/Cargo.toml",
-    "run:dev": "cd src-tauri/target/debug && gmail_tray_notifier.exe"
+    "rebuild:rust": "cargo build --manifest-path src-tauri/Cargo.toml",
+    "rebuild": "npm run rebuild:rust",
+    "run:debug:windows": "cd src-tauri/target/debug && gmail_tray_notifier.exe",
+    "run:dev": "npm run run:debug:windows"
   },
   "keywords": [
     "tauri",
@@ -20,5 +26,8 @@
     "notifier"
   ],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "devDependencies": {
+    "baseline-browser-mapping": "^2.10.18"
+  }
 }

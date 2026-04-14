@@ -88,10 +88,20 @@ impl NotificationQueue {
         state.current = None;
         state.pending.clear();
     }
-}
 
+    pub fn remove_from_pending(&self, id: &str) -> bool {
+        let mut state = self.inner.lock();
+        let before = state.pending.len();
+        state.pending.retain(|notification| notification.id != id);
+        before != state.pending.len()
+    }
+}
 fn emit_notification(app: &AppHandle, notification: GmailNotification, settings: &Settings) -> Result<()> {
     info!("emit_notification: шаг 1 - начало для уведомления {}", notification.id);
+    match serde_json::to_string_pretty(&notification) {
+        Ok(raw) => info!("emit_notification: payload JSON = {}", raw),
+        Err(err) => warn!(%err, "emit_notification: failed to stringify notification payload"),
+    }
 
     info!("emit_notification: шаг 2 - пытаемся получить окно alert");
     if let Some(win) = app.get_webview_window("alert") {

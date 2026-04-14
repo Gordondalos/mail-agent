@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
-use base64::{Engine as _, engine::general_purpose::STANDARD as base64};
+use base64::{Engine as _, engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD}};
 use chrono::{DateTime, Utc};
 use lru::LruCache;
 use parking_lot::Mutex;
@@ -54,14 +54,27 @@ impl GmailClient {
     }
 
     pub async fn fetch_unread(&self, query: &str) -> Result<Vec<GmailNotification>> {
+        self.fetch_unread_internal(query, 10, true).await
+    }
+
+    pub async fn list_unread_preview(&self, query: &str, limit: usize) -> Result<Vec<GmailNotification>> {
+        self.fetch_unread_internal(query, limit, false).await
+    }
+
+    async fn fetch_unread_internal(&self, query: &str, limit: usize, apply_dedup: bool) -> Result<Vec<GmailNotification>> {
         let token = self.token_provider.access_token().await?;
         let url = format!("{}/messages", GMAIL_API);
         debug!(%url, %query, "gmail: listing messages");
+        let max_results = limit.max(1).min(100);
         let response = self
             .http
             .get(url)
             .bearer_auth(token)
-            .query(&[("q", query), ("maxResults", "10"), ("labelIds", "UNREAD")])
+            .query(&[
+                ("q", query),
+                ("maxResults", &max_results.to_string()),
+                ("labelIds", "UNREAD"),
+            ])
             .send()
             .await
             .context("failed to list gmail messages")?;
@@ -82,15 +95,20 @@ impl GmailClient {
             .await
             .context("invalid gmail list response")?;
         let mut notifications = Vec::new();
-        let items = list.messages.unwrap_or_default();
+        let mut items = list.messages.unwrap_or_default();
+        if items.len() > max_results {
+            items.truncate(max_results);
+        }
         debug!(count = items.len(), "gmail: list parsed");
         for item in items {
-            if self.is_known(&item.id) {
+            if apply_dedup && self.is_known(&item.id) {
                 continue;
             }
             match self.fetch_message(&item.id).await {
                 Ok(notification) => {
-                    self.mark_seen(&notification.id);
+                    if apply_dedup {
+                        self.mark_seen(&notification.id);
+                    }
                     notifications.push(notification);
                 }
                 Err(err) => warn!(%err, message_id = %item.id, "failed to fetch message"),
@@ -148,7 +166,80 @@ impl GmailClient {
                     i, part.mime_type, part.body.is_some(), part.parts.len());
             }
         }
-        Ok(details.into_notification())
+        // Для некоторых MIME-частей Gmail отдает тело только по attachmentId.
+        let extracted_body = self.extract_body_with_attachments(id, &details.payload).await;
+        Ok(details.into_notification_with_body(extracted_body))
+    }
+
+    async fn extract_body_with_attachments(&self, message_id: &str, payload: &MessagePayload) -> Option<String> {
+        if let Some(html) = find_part_by_mime(payload, "text/html") {
+            if let Some(decoded) = self.decode_or_fetch_body(message_id, &html).await {
+                return Some(decoded);
+            }
+        }
+
+        if let Some(text) = find_part_by_mime(payload, "text/plain") {
+            if let Some(decoded) = self.decode_or_fetch_body(message_id, &text).await {
+                return Some(decoded);
+            }
+        }
+
+        if let Some(body) = payload.body.as_ref() {
+            if let Some(decoded) = self.decode_or_fetch_body(message_id, body).await {
+                return Some(decoded);
+            }
+        }
+
+        None
+    }
+
+    async fn decode_or_fetch_body(&self, message_id: &str, body: &MessageBody) -> Option<String> {
+        if let Some(decoded) = decode_body(body) {
+            return Some(decoded);
+        }
+
+        let attachment_id = body.attachment_id.as_deref()?;
+        self.fetch_attachment_body(message_id, attachment_id).await
+    }
+
+    async fn fetch_attachment_body(&self, message_id: &str, attachment_id: &str) -> Option<String> {
+        let token = match self.token_provider.access_token().await {
+            Ok(token) => token,
+            Err(err) => {
+                warn!(%err, %message_id, %attachment_id, "gmail: failed to get token for attachment");
+                return None;
+            }
+        };
+
+        let url = format!(
+            "{}/messages/{}/attachments/{}",
+            GMAIL_API, message_id, attachment_id
+        );
+        let response = match self.http.get(url).bearer_auth(token).send().await {
+            Ok(resp) => resp,
+            Err(err) => {
+                warn!(%err, %message_id, %attachment_id, "gmail: attachment request failed");
+                return None;
+            }
+        };
+
+        if !response.status().is_success() {
+            warn!(status = %response.status(), %message_id, %attachment_id, "gmail: attachment response status is not success");
+            return None;
+        }
+
+        let payload: AttachmentPayload = match response.json().await {
+            Ok(payload) => payload,
+            Err(err) => {
+                warn!(%err, %message_id, %attachment_id, "gmail: invalid attachment response");
+                return None;
+            }
+        };
+
+        payload
+            .data
+            .as_deref()
+            .and_then(decode_base64url_text)
     }
 
     pub async fn mark_read(&self, id: &str) -> Result<()> {
@@ -229,6 +320,8 @@ struct MessagePart {
 #[derive(Debug, Clone, Deserialize)]
 struct MessageBody {
     data: Option<String>,
+    #[serde(rename = "attachmentId")]
+    attachment_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -237,8 +330,18 @@ struct Header {
     value: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct AttachmentPayload {
+    data: Option<String>,
+}
+
 impl Message {
     fn into_notification(self) -> GmailNotification {
+        let body = extract_body(&self.payload);
+        self.into_notification_with_body(body)
+    }
+
+    fn into_notification_with_body(self, body: Option<String>) -> GmailNotification {
         let subject = self
             .payload
             .headers
@@ -267,15 +370,8 @@ impl Message {
             .map(|dt| dt.with_timezone(&Utc));
         let url = format!(
             "https://mail.google.com/mail/u/0/#inbox/{message}",
-            message = self.id
+            message = self.id.clone()
         );
-
-        // Извлекаем тело письма (приоритет: HTML, затем plain text)
-        let body = extract_body(&self.payload);
-        debug!("into_notification: тело письма извлечено, есть ли body = {}", body.is_some());
-        if let Some(ref b) = body {
-            debug!("into_notification: длина тела = {}", b.len());
-        }
 
         GmailNotification {
             id: self.id,
@@ -337,12 +433,14 @@ fn extract_body(payload: &MessagePayload) -> Option<String> {
 
 fn find_part_by_mime(payload: &MessagePayload, mime_type: &str) -> Option<MessageBody> {
     debug!("find_part_by_mime: ищем тип {}", mime_type);
+    let target = mime_type.to_ascii_lowercase();
     // Рекурсивный поиск по частям
     for part in &payload.parts {
         debug!("find_part_by_mime: проверяем часть с типом {}", part.mime_type);
+        let part_mime = part.mime_type.to_ascii_lowercase();
 
         // Если это multipart контейнер, сначала проверяем его подчасти
-        if part.mime_type.starts_with("multipart/") {
+        if part_mime.starts_with("multipart/") {
             debug!("find_part_by_mime: найден multipart контейнер, проверяем {} вложенных частей", part.parts.len());
             if !part.parts.is_empty() {
                 let nested_payload = MessagePayload {
@@ -358,15 +456,13 @@ fn find_part_by_mime(payload: &MessagePayload, mime_type: &str) -> Option<Messag
         }
 
         // Проверяем совпадение типа
-        if part.mime_type == mime_type {
+        if part_mime == target || part_mime.starts_with(&(target.clone() + ";")) {
             if let Some(ref body) = part.body {
-                debug!("find_part_by_mime: найдено тело для типа {}, data.is_some={}", mime_type, body.data.is_some());
-                if let Some(ref data) = body.data {
-                    debug!("find_part_by_mime: длина data={}", data.len());
-                    // Возвращаем только если есть данные
-                    if !data.is_empty() {
-                        return Some(MessageBody { data: body.data.clone() });
-                    }
+                let has_data = body.data.as_ref().is_some_and(|d| !d.is_empty());
+                let has_attachment = body.attachment_id.as_ref().is_some_and(|id| !id.is_empty());
+                debug!("find_part_by_mime: найдено тело для типа {}, has_data={}, has_attachment={}", mime_type, has_data, has_attachment);
+                if has_data || has_attachment {
+                    return Some(body.clone());
                 }
             } else {
                 debug!("find_part_by_mime: у части с типом {} нет body", mime_type);
@@ -393,19 +489,23 @@ fn find_part_by_mime(payload: &MessagePayload, mime_type: &str) -> Option<Messag
 
 fn decode_body(body: &MessageBody) -> Option<String> {
     debug!("decode_body: начало декодирования, есть ли data = {}", body.data.is_some());
-    body.data.as_ref().and_then(|data| {
-        debug!("decode_body: длина закодированных данных = {}", data.len());
-        // Gmail использует URL-safe Base64
-        let replaced = data.replace('-', "+").replace('_', "/");
-        let decoded = base64.decode(&replaced)
-            .ok()
-            .and_then(|bytes| {
-                debug!("decode_body: декодировано {} байт", bytes.len());
-                String::from_utf8(bytes).ok()
-            });
-        debug!("decode_body: результат декодирования = {}", decoded.is_some());
-        decoded
-    })
+    body.data.as_deref().and_then(decode_base64url_text)
+}
+
+fn decode_base64url_text(data: &str) -> Option<String> {
+    debug!("decode_body: длина закодированных данных = {}", data.len());
+    // Иногда Gmail возвращает переносы строк внутри data.
+    let compact: String = data.chars().filter(|c| !c.is_whitespace()).collect();
+    let decoded = URL_SAFE_NO_PAD
+        .decode(compact.as_bytes())
+        .or_else(|_| URL_SAFE.decode(compact.as_bytes()))
+        .ok()
+        .and_then(|bytes| {
+            debug!("decode_body: декодировано {} байт", bytes.len());
+            String::from_utf8(bytes).ok()
+        });
+    debug!("decode_body: результат декодирования = {}", decoded.is_some());
+    decoded
 }
 
 pub async fn wait_for_authorisation(token_provider: Arc<dyn AccessTokenProvider>) -> bool {
@@ -422,6 +522,7 @@ pub async fn wait_for_authorisation(token_provider: Arc<dyn AccessTokenProvider>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
     #[test]
     fn parses_camel_case_message_payload() {
@@ -454,5 +555,68 @@ mod tests {
         );
         assert_eq!(notification.thread_id, "thread-1");
         assert!(notification.received_at.is_some(), "date header converted");
+    }
+
+    #[test]
+    fn decodes_gmail_base64url_without_padding() {
+        let plain = "Hello from Gmail body";
+        let encoded = URL_SAFE_NO_PAD.encode(plain.as_bytes());
+        let body = MessageBody {
+            data: Some(encoded),
+            attachment_id: None,
+        };
+        assert_eq!(decode_body(&body).as_deref(), Some(plain));
+    }
+
+    #[test]
+    fn finds_mime_with_charset_parameters() {
+        let plain = "text body";
+        let encoded = URL_SAFE_NO_PAD.encode(plain.as_bytes());
+        let payload = MessagePayload {
+            headers: vec![],
+            parts: vec![MessagePart {
+                mime_type: "text/plain; charset=UTF-8".to_string(),
+                body: Some(MessageBody {
+                    data: Some(encoded),
+                    attachment_id: None,
+                }),
+                parts: vec![],
+            }],
+            body: None,
+        };
+
+        let found = find_part_by_mime(&payload, "text/plain").expect("part found");
+        assert_eq!(decode_body(&found).as_deref(), Some(plain));
+    }
+
+    #[test]
+    fn finds_part_with_attachment_id_even_without_inline_data() {
+        let payload = MessagePayload {
+            headers: vec![],
+            parts: vec![MessagePart {
+                mime_type: "text/html; charset=UTF-8".to_string(),
+                body: Some(MessageBody {
+                    data: None,
+                    attachment_id: Some("att-1".to_string()),
+                }),
+                parts: vec![],
+            }],
+            body: None,
+        };
+
+        let found = find_part_by_mime(&payload, "text/html").expect("part found");
+        assert_eq!(found.attachment_id.as_deref(), Some("att-1"));
+    }
+
+    #[test]
+    fn decodes_base64url_with_whitespace() {
+        let plain = "Long body with spacing";
+        let encoded = URL_SAFE_NO_PAD.encode(plain.as_bytes());
+        let spaced = format!("{}\n{}", &encoded[..6], &encoded[6..]);
+        let body = MessageBody {
+            data: Some(spaced),
+            attachment_id: None,
+        };
+        assert_eq!(decode_body(&body).as_deref(), Some(plain));
     }
 }

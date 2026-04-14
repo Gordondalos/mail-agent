@@ -26,7 +26,7 @@ use tauri::{
     menu::{MenuBuilder, MenuItem},
     path::BaseDirectory,
     tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager,
+    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize,
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tokio::time::sleep;
@@ -386,6 +386,68 @@ async fn dismiss_notification(
 }
 
 #[tauri::command]
+async fn list_unread(
+    state: tauri::State<'_, AppState>,
+    limit: Option<usize>,
+) -> Result<Vec<GmailNotification>, String> {
+    let settings = state.settings.get();
+    let cap = limit.unwrap_or(10);
+    info!(limit = cap, query = %settings.gmail_query, "list_unread: request");
+    let items = state
+        .gmail
+        .list_unread_preview(&settings.gmail_query, cap)
+        .await
+        .map_err(|err| err.to_string())?;
+
+    info!(count = items.len(), "list_unread: response");
+    for item in &items {
+        info!(
+            id = %item.id,
+            subject = %item.subject,
+            body_len = item.body.as_ref().map(|b| b.len()).unwrap_or(0),
+            snippet_len = item.snippet.as_ref().map(|s| s.len()).unwrap_or(0),
+            "list_unread: item"
+        );
+    }
+
+    Ok(items)
+}
+
+#[tauri::command]
+async fn mark_messages_read(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    message_ids: Vec<String>,
+) -> Result<(), String> {
+    if message_ids.is_empty() {
+        return Ok(());
+    }
+    let settings = state.settings.get();
+    for id in message_ids {
+        state
+            .mark_read(&id)
+            .await
+            .map_err(|err| err.to_string())?;
+        state.gmail.forget(&id);
+        let is_current = state
+            .notifier
+            .current()
+            .as_ref()
+            .map(|msg| msg.id == id)
+            .unwrap_or(false);
+        if is_current {
+            state
+                .notifier
+                .complete_current(&app, &settings)
+                .map_err(|err| err.to_string())?;
+        } else {
+            state.notifier.remove_from_pending(&id);
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
 async fn snooze(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
     let duration_mins = state.settings.get().snooze_duration_mins;
     let duration = Duration::from_secs(duration_mins * 60);
@@ -400,6 +462,45 @@ async fn snooze(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<(),
     }
 
     info!("snooze: window hidden, snooze active");
+    Ok(())
+}
+
+#[tauri::command]
+async fn toggle_alert_window(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    expanded: bool,
+) -> Result<(), String> {
+    let settings = state.settings.get();
+    let Some(win) = app.get_webview_window("alert") else {
+        return Err("alert window not found".to_string());
+    };
+
+    info!("toggle_alert_window: expanded={}", expanded);
+
+    if expanded {
+        // Разворачиваем на весь экран
+        if let Ok(Some(monitor)) = win.current_monitor() {
+            let width = monitor.size().width;
+            let height = monitor.size().height;
+            let x = monitor.position().x;
+            let y = monitor.position().y;
+            info!("toggle_alert_window: fullscreen {}x{} pos ({},{})", width, height, x, y);
+            let _ = win.set_position(PhysicalPosition::new(x, y));
+            let _ = win.set_size(PhysicalSize::new(width, height));
+        } else {
+            let _ = win.set_position(PhysicalPosition::new(0i32, 0i32));
+            let _ = win.set_size(PhysicalSize::new(1920u32, 1080u32));
+        }
+    } else {
+        // Сворачиваем: маленькое окно в правом нижнем углу
+        let width = settings.notification_width;
+        let height = settings.notification_height;
+        info!("toggle_alert_window: collapse to {}x{}", width, height);
+        let _ = win.set_size(PhysicalSize::new(width as u32, height as u32));
+        place_alert_window(&win);
+    }
+
     Ok(())
 }
 
@@ -636,9 +737,12 @@ fn main() {
             mark_message_read,
             open_in_browser,
             dismiss_notification,
+            list_unread,
+            mark_messages_read,
             snooze,
             current_notification,
-            list_voice_tracks
+            list_voice_tracks,
+            toggle_alert_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -662,4 +766,21 @@ fn emit_auth_required(app: &AppHandle, message: &str) {
     ) {
         warn!(%err, "failed to notify auth requirement");
     }
+}
+
+fn place_alert_window(win: &tauri::WebviewWindow) {
+    let monitor = match win.current_monitor() {
+        Ok(Some(monitor)) => monitor,
+        _ => return,
+    };
+
+    let settings = win.state::<AppState>().settings.get();
+    let width = settings.notification_width;
+    let height = settings.notification_height;
+
+    let margin = 64i32;
+    let x = monitor.position().x + monitor.size().width as i32 - width as i32 - margin;
+    let y = monitor.position().y + monitor.size().height as i32 - height as i32 - margin;
+
+    let _ = win.set_position(PhysicalPosition::new(x.max(0), y.max(0)));
 }
