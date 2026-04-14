@@ -31,9 +31,24 @@
         (click)="markAllSidebarMessagesRead()"
         [disabled]="sidebarBulkAction() || !sidebarMessages().length"
       >
+        @if (sidebarBulkAction()) {
+        Обновляю...
+        } @else {
         Прочитать все
+        }
       </button>
-      @if (sidebarMessages().length) {
+      @if (sidebarBulkAction()) {
+      <div class="sidebar-refreshing" aria-live="polite">
+        <div class="sidebar-refreshing__spinner" aria-hidden="true"></div>
+        <p class="sidebar-refreshing__text">Обновляю список...</p>
+        <div class="sidebar-skeleton">
+          <div class="sidebar-skeleton__item"></div>
+          <div class="sidebar-skeleton__item"></div>
+          <div class="sidebar-skeleton__item"></div>
+          <div class="sidebar-skeleton__item"></div>
+        </div>
+      </div>
+      } @else if (sidebarMessages().length) {
       <ul class="sidebar-list">
         @for (item of sidebarMessages(); track item.id) {
         <li
