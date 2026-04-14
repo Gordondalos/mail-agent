@@ -508,26 +508,35 @@ async fn toggle_alert_window(
     info!("toggle_alert_window: expanded={}", expanded);
 
     if expanded {
-        // Разворачиваем на весь экран
+        let width = settings.notification_expanded_width.max(settings.notification_width);
+        let height = settings.notification_expanded_height.max(settings.notification_height);
+        let _ = win.set_decorations(true);
+        let _ = win.set_always_on_top(false);
+        let _ = win.set_skip_taskbar(false);
+
+        // Разворачиваем в обычное окно по центру рабочего монитора.
         if let Ok(Some(monitor)) = win.current_monitor() {
-            let width = monitor.size().width;
-            let height = monitor.size().height;
-            let x = monitor.position().x;
-            let y = monitor.position().y;
+            let monitor_width = monitor.size().width as i32;
+            let monitor_height = monitor.size().height as i32;
+            let x = monitor.position().x + ((monitor_width - width as i32) / 2).max(0);
+            let y = monitor.position().y + ((monitor_height - height as i32) / 2).max(0);
             info!(
-                "toggle_alert_window: fullscreen {}x{} pos ({},{})",
+                "toggle_alert_window: expanded {}x{} pos ({},{})",
                 width, height, x, y
             );
             let _ = win.set_position(PhysicalPosition::new(x, y));
-            let _ = win.set_size(PhysicalSize::new(width, height));
+            let _ = win.set_size(PhysicalSize::new(width as u32, height as u32));
         } else {
             let _ = win.set_position(PhysicalPosition::new(0i32, 0i32));
-            let _ = win.set_size(PhysicalSize::new(1920u32, 1080u32));
+            let _ = win.set_size(PhysicalSize::new(width as u32, height as u32));
         }
     } else {
         // Сворачиваем: маленькое окно в правом нижнем углу
         let width = settings.notification_width;
         let height = settings.notification_height;
+        let _ = win.set_decorations(false);
+        let _ = win.set_always_on_top(true);
+        let _ = win.set_skip_taskbar(true);
         info!("toggle_alert_window: collapse to {}x{}", width, height);
         let _ = win.set_size(PhysicalSize::new(width as u32, height as u32));
         place_alert_window(&win);

@@ -1,6 +1,7 @@
 @if (current()) {
 <div class="alert-shell" [class.alert-shell--expanded]="isExpanded()">
   <div class="alert-card" [class.alert-card--expanded]="isExpanded()">
+    @if (!isExpanded()) {
     <button
       class="alert-close"
       type="button"
@@ -10,6 +11,7 @@
     >
       <mat-icon>close</mat-icon>
     </button>
+    }
 
     @if (isExpanded()) {
     <div class="alert-sidebar" data-tauri-drag-region="false">
@@ -131,48 +133,6 @@
       </p>
       }
     </div>
-    @if (isExpanded()) {
-    <div
-      class="resize-handle resize-handle--north"
-      data-tauri-drag-region="false"
-      (mousedown)="startResizeDrag($event, 'North')"
-    ></div>
-    <div
-      class="resize-handle resize-handle--south"
-      data-tauri-drag-region="false"
-      (mousedown)="startResizeDrag($event, 'South')"
-    ></div>
-    <div
-      class="resize-handle resize-handle--east"
-      data-tauri-drag-region="false"
-      (mousedown)="startResizeDrag($event, 'East')"
-    ></div>
-    <div
-      class="resize-handle resize-handle--west"
-      data-tauri-drag-region="false"
-      (mousedown)="startResizeDrag($event, 'West')"
-    ></div>
-    <div
-      class="resize-handle resize-handle--north-east"
-      data-tauri-drag-region="false"
-      (mousedown)="startResizeDrag($event, 'NorthEast')"
-    ></div>
-    <div
-      class="resize-handle resize-handle--north-west"
-      data-tauri-drag-region="false"
-      (mousedown)="startResizeDrag($event, 'NorthWest')"
-    ></div>
-    <div
-      class="resize-handle resize-handle--south-east"
-      data-tauri-drag-region="false"
-      (mousedown)="startResizeDrag($event, 'SouthEast')"
-    ></div>
-    <div
-      class="resize-handle resize-handle--south-west"
-      data-tauri-drag-region="false"
-      (mousedown)="startResizeDrag($event, 'SouthWest')"
-    ></div>
-    }
   </div>
 </div>
 }

@@ -21,16 +21,6 @@ type NotificationPayload = {
   body?: string | null;
 };
 
-type ResizeDirection =
-  | 'East'
-  | 'North'
-  | 'NorthEast'
-  | 'NorthWest'
-  | 'South'
-  | 'SouthEast'
-  | 'SouthWest'
-  | 'West';
-
 @Component({
   selector: 'app-notification-overlay',
   imports: [CommonModule, MatIconModule],
@@ -341,19 +331,6 @@ export class NotificationOverlay implements OnInit, OnDestroy {
       await this.windowRef.startDragging();
     } catch (error) {
       console.debug('[overlay.drag] startDragging failed', error);
-    }
-  }
-
-  async startResizeDrag(event: MouseEvent, direction: ResizeDirection) {
-    if (event.button !== 0) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    try {
-      await this.windowRef.startResizeDragging(direction);
-    } catch (error) {
-      console.debug('[overlay.resize] startResizeDragging failed', { direction, error });
     }
   }
 
