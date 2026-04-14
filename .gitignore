@@ -4,6 +4,7 @@ release/
 src-tauri/target/
 src-tauri/debug/
 src-tauri/release/
+src-tauri/alert/
 *.rs.bk
 *.rlib
 *.prof*
