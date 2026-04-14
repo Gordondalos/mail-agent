@@ -52,11 +52,6 @@ export class NotificationOverlay implements OnInit, OnDestroy {
     }
     return selected.id === current.id;
   });
-  bodyLength = computed<number>(() => this.displayedMessage()?.body?.length ?? 0);
-  debugPayload = computed<string>(() => {
-    const message = this.displayedMessage();
-    return message ? JSON.stringify(message, null, 2) : 'null';
-  });
   safeBody = computed<SafeHtml | null>(() => {
     const n = this.displayedMessage();
     if (!this.isExpanded()) {

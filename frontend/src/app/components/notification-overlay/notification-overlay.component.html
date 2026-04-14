@@ -78,9 +78,6 @@
         <div class="alert-snippet" *ngIf="!isExpanded()">{{ display.snippet || '' }}</div>
 
         <div class="alert-body" *ngIf="isExpanded()" data-tauri-drag-region="false">
-          <div class="alert-debug-meta">
-            body length: {{ bodyLength() }}
-          </div>
           <ng-container *ngIf="safeBody() as body; else noBody">
             <div class="alert-body__content" [innerHTML]="body"></div>
           </ng-container>
@@ -89,11 +86,6 @@
             <p class="alert-body__empty" *ngIf="display.snippet">Есть только snippet: {{ display.snippet }}</p>
           </ng-template>
         </div>
-
-        <details class="alert-debug" *ngIf="isExpanded()">
-          <summary>Debug payload (JSON)</summary>
-          <pre>{{ debugPayload() }}</pre>
-        </details>
       </ng-container>
       <ng-template #noSelection>
         <div class="alert-empty">Выберите письмо слева, чтобы просмотреть содержимое.</div>
@@ -107,7 +99,6 @@
       <p class="alert-actions__hint" *ngIf="isExpanded() && !canUsePrimaryActions()">
         Действия доступны только для активного уведомления
       </p>
-      <p class="alert-actions__hint">expanded: {{ isExpanded() }}</p>
     </div>
   </div>
 </div>
